@@ -1,10 +1,10 @@
 // HUD: DOM element updates, minimap render, toasts, banners, dialog, phone.
 
 import { WANTED_NAMES, money$, clamp } from './config.js';
-import { CITY_W, CITY_H, roadsX, roadsY } from './world.js';
 import { WEAPONS } from './config.js';
 import { skyPhase } from './render.js';
-import { MISSIONS, missionState, ACTIVITIES, nearbyActivities, blipTargets } from './missions.js';
+import { MISSIONS, missionState, nearbyActivities, blipTargets } from './missions.js';
+import { drawMinimap } from './minimap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -146,54 +146,6 @@ export class Hud {
       if (this.dialogT <= 0) this.el.dialog.style.display = 'none';
     }
     // minimap
-    this.drawMinimap(state);
-  }
-
-  drawMinimap(state) {
-    const g = this.mmx;
-    const W = this.mm.width, H = this.mm.height;
-    g.clearRect(0, 0, W, H);
-    g.fillStyle = '#0a1220';
-    g.fillRect(0, 0, W, H);
-    const scale = Math.min(W / CITY_W, H / CITY_H) * 2.6;
-    const p = state.player;
-    const cx = clamp(p.x, W / (2 * scale), CITY_W - W / (2 * scale));
-    const cy = clamp(p.y, H / (2 * scale), CITY_H - H / (2 * scale));
-    g.save();
-    g.scale(scale, scale);
-    g.translate(-cx + W / (2 * scale), -cy + H / (2 * scale));
-    // roads
-    g.strokeStyle = '#2c3a4d';
-    g.lineWidth = 14;
-    g.beginPath();
-    for (const rx of roadsX) { g.moveTo(rx, 0); g.lineTo(rx, CITY_H); }
-    for (const ry of roadsY) { g.moveTo(0, ry); g.lineTo(CITY_W, ry); }
-    g.stroke();
-    // beach strip
-    g.fillStyle = '#20486a';
-    g.fillRect(0, CITY_H - 4 * 40, CITY_W, 4 * 40);
-    // districts labels skipped on mini
-    // activity blips
-    for (const a of ACTIVITIES) {
-      if (a.kind === 'collect' && a.done) continue;
-      g.fillStyle = a.kind === 'race' ? '#ffd23f' : a.kind === 'casino' ? '#c07bff' : '#5fb8a8';
-      g.fillRect(a.x - 4, a.y - 4, 8, 8);
-    }
-    // mission blips
-    for (const b of blipTargets(state)) {
-      g.fillStyle = b.kind === 'mission' ? '#ff2d78' : '#0ff';
-      g.beginPath(); g.arc(b.x, b.y, 9, 0, Math.PI * 2); g.fill();
-    }
-    // player
-    g.fillStyle = '#ffffff';
-    g.save();
-    g.translate(p.x, p.y);
-    g.rotate(p.dir + Math.PI / 2);
-    g.beginPath(); g.moveTo(0, -10); g.lineTo(7, 8); g.lineTo(-7, 8); g.closePath(); g.fill();
-    g.restore();
-    g.restore();
-    // frame
-    g.strokeStyle = '#2a4a73';
-    g.strokeRect(0.5, 0.5, W - 1, H - 1);
+    drawMinimap(this.mmx, this.mm, state, { world: this.world, districtLabel: this.districtLabel });
   }
 }

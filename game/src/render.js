@@ -28,7 +28,7 @@ export function palette(clock) {
   const ph = skyPhase(clock);
   const pick = (a, b, c) => (ph.t < 0.5 ? mix(a, b, ph.t * 2) : mix(b, c, ph.t * 2 - 1));
   const d = COLORS.day, k = COLORS.dusk, n = COLORS.night;
-  return {
+  const p = {
     sky1: pick(d.sky1, k.sky1, n.sky1),
     sky2: pick(d.sky2, k.sky2, n.sky2),
     ground: pick(d.ground, k.ground, n.ground),
@@ -37,6 +37,21 @@ export function palette(clock) {
     dark: ph.t,
     name: ph.name,
   };
+  // dawn/dusk tint gradients: warm horizontal wash at the horizon
+  if (ph.name === 'dusk') {
+    p.tint = `rgba(255,110,60,${0.16 + ph.t * 0.1})`;
+    p.tint2 = 'rgba(90,40,120,0.20)';
+  } else if (ph.name === 'dawn') {
+    p.tint = `rgba(255,170,90,${0.10 + ph.t * 0.16})`;
+    p.tint2 = 'rgba(70,90,160,0.16)';
+  } else if (ph.name === 'night') {
+    p.tint = 'rgba(10,16,44,0.30)';
+    p.tint2 = 'rgba(4,6,18,0.42)';
+  } else {
+    p.tint = null;
+    p.tint2 = null;
+  }
+  return p;
 }
 
 function off(x, y, cam, w, h) {
@@ -46,8 +61,13 @@ function off(x, y, cam, w, h) {
 export function draw(ctx, cam, world, state, w, h) {
   const pal = palette(state.clock);
   const night = pal.dark;
+  // dawn/dusk: vertical sky gradient from deep blue to a warm horizon band
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, pal.sky1); g.addColorStop(1, pal.sky2);
+  if (pal.name === 'dusk' || pal.name === 'dawn') {
+    g.addColorStop(0.55, pal.sky2);
+    g.addColorStop(1, pal.name === 'dusk' ? '#ffb347' : '#ffd9a0');
+  }
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 
   ctx.save();
@@ -60,6 +80,15 @@ export function draw(ctx, cam, world, state, w, h) {
   drawActors(ctx, state, pal, cam, w, h);
 
   ctx.restore();
+
+  // dawn/dusk tint gradient wash across the whole viewport
+  if (pal.tint) {
+    const tg = ctx.createLinearGradient(0, h, 0, h * 0.25);
+    tg.addColorStop(0, pal.tint);
+    tg.addColorStop(1, pal.tint2 ?? 'rgba(0,0,0,0)');
+    ctx.fillStyle = tg;
+    ctx.fillRect(0, 0, w, h);
+  }
 
   if (night > 0.05) {
     ctx.fillStyle = `rgba(4,6,18,${night * 0.5})`;
@@ -75,14 +104,42 @@ export function draw(ctx, cam, world, state, w, h) {
     }
     for (const n of world.neons) {
       if (off(n.x, n.y, cam, w, h)) continue;
-      const rg = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, 70);
-      rg.addColorStop(0, hexA(n.color, 0.73)); rg.addColorStop(1, hexA(n.color, 0));
-      ctx.fillStyle = rg; ctx.fillRect(n.x - 70, n.y - 70, 140, 140);
+      // wide soft halo + tight core so the sign reads as a glowing tube
+      const rg = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, 110);
+      rg.addColorStop(0, hexA(n.color, 0.55)); rg.addColorStop(0.35, hexA(n.color, 0.30)); rg.addColorStop(1, hexA(n.color, 0));
+      ctx.fillStyle = rg; ctx.fillRect(n.x - 110, n.y - 110, 220, 220);
+      const rg2 = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, 44);
+      rg2.addColorStop(0, hexA(n.color, 0.85)); rg2.addColorStop(1, hexA(n.color, 0));
+      ctx.fillStyle = rg2; ctx.fillRect(n.x - 44, n.y - 44, 88, 88);
+      // neon spill onto the road below the sign
+      const sg = ctx.createLinearGradient(n.x, n.y, n.x, n.y + 90);
+      sg.addColorStop(0, hexA(n.color, 0.30)); sg.addColorStop(1, hexA(n.color, 0));
+      ctx.fillStyle = sg; ctx.fillRect(n.x - 46, n.y, 92, 90);
+    }
+    // neon window glow: lit building windows shimmer their own color at night
+    for (const b of world.blocks) {
+      if (off(b.x, b.y, cam, w, h)) continue;
+      for (const bd of b.buildings) {
+        if (!bd.neonGlow || off(bd.x + bd.w / 2, bd.y + bd.h / 2, cam, w, h)) continue;
+        const rg = ctx.createRadialGradient(bd.x + bd.w / 2, bd.y + bd.h / 2, 0, bd.x + bd.w / 2, bd.y + bd.h / 2, Math.max(bd.w, bd.h) * 0.9);
+        rg.addColorStop(0, hexA(bd.neonColor ?? '#ffd23f', 0.20)); rg.addColorStop(1, hexA(bd.neonColor ?? '#ffd23f', 0));
+        ctx.fillStyle = rg;
+        ctx.fillRect(bd.x - bd.w, bd.y - bd.h, bd.w * 3, bd.h * 3);
+      }
     }
     for (const c of state.cars) {
       if (c.alive && c.lights && !off(c.x, c.y, cam, w, h)) drawHeadlights(ctx, c);
     }
     if (state.player.car && state.player.car.lights) drawHeadlights(ctx, state.player.car);
+    // police lightbars splash color onto the street at night
+    for (const c of state.cars) {
+      if (!c.alive || c.vtype !== 'police' || !c.siren || off(c.x, c.y, cam, w, h)) continue;
+      const bar = Math.floor(performance.now() / 160) % 2 === 0;
+      const col = bar ? '255,60,90' : '70,120,255';
+      const rg = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 130);
+      rg.addColorStop(0, `rgba(${col},0.4)`); rg.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = rg; ctx.fillRect(c.x - 130, c.y - 130, 260, 260);
+    }
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
   }
@@ -157,8 +214,24 @@ function drawBlocks(ctx, world, pal, cam, w, h) {
           const s = Math.sin(wx * 12.9898 + wy * 78.233 + bd.winSeed) * 43758.5453;
           const f = s - Math.floor(s);
           if (f < 0.3) continue;
-          ctx.fillStyle = pal.dark > 0.45 ? (f > 0.75 ? '#ffe9a8' : '#e8c96a') : 'rgba(140,180,220,0.3)';
-          ctx.fillRect(wx, wy, 5, 6);
+          const warm = f > 0.75 ? '#ffe9a8' : '#e8c96a';
+          if (pal.dark > 0.45) {
+            ctx.fillStyle = warm;
+            ctx.fillRect(wx, wy, 5, 6);
+            // every ~7th lit window also glows its building tint at night
+            if (f > 0.92 && bd.winSeed % 3 !== 0) {
+              const glowCol = ['#ffd23f', '#7dff9a', '#7ec8ff', '#ff9de2'][(bd.winSeed + Math.floor(wx)) % 4];
+              ctx.fillStyle = glowCol;
+              ctx.globalAlpha = 0.65 + 0.35 * Math.sin(performance.now() / 700 + wx + wy);
+              ctx.fillRect(wx - 1, wy - 1, 7, 8);
+              ctx.globalAlpha = 1;
+              bd.neonGlow = true;
+              bd.neonColor = glowCol;
+            }
+          } else {
+            ctx.fillStyle = 'rgba(140,180,220,0.3)';
+            ctx.fillRect(wx, wy, 5, 6);
+          }
         }
       }
       ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1;
@@ -222,12 +295,20 @@ function drawHeadlights(ctx, c) {
   const fx = Math.cos(c.dir), fy = Math.sin(c.dir);
   const lx = c.x + fx * 30, ly = c.y + fy * 30;
   const a0 = Math.atan2(-fy, -fx);
-  const rg = ctx.createRadialGradient(lx, ly, 0, lx, ly, 90);
-  rg.addColorStop(0, 'rgba(255,245,200,0.32)'); rg.addColorStop(1, 'rgba(255,245,200,0)');
+  // long soft beam + hot core so headlights carve the road at night
+  const rg = ctx.createRadialGradient(lx, ly, 0, lx, ly, 150);
+  rg.addColorStop(0, 'rgba(255,245,200,0.40)'); rg.addColorStop(0.4, 'rgba(255,240,190,0.16)'); rg.addColorStop(1, 'rgba(255,245,200,0)');
   ctx.fillStyle = rg;
   ctx.beginPath();
   ctx.moveTo(c.x + fx * 14, c.y + fy * 14);
-  ctx.arc(lx, ly, 90, a0 - 0.55, a0 + 0.55);
+  ctx.arc(lx, ly, 150, a0 - 0.5, a0 + 0.5);
+  ctx.closePath(); ctx.fill();
+  const rg2 = ctx.createRadialGradient(lx, ly, 0, lx, ly, 55);
+  rg2.addColorStop(0, 'rgba(255,252,225,0.55)'); rg2.addColorStop(1, 'rgba(255,252,225,0)');
+  ctx.fillStyle = rg2;
+  ctx.beginPath();
+  ctx.moveTo(c.x + fx * 14, c.y + fy * 14);
+  ctx.arc(lx, ly, 55, a0 - 0.32, a0 + 0.32);
   ctx.closePath(); ctx.fill();
   const bx = c.x - fx * 16, by = c.y - fy * 16;
   ctx.fillStyle = 'rgba(255,60,60,0.85)';

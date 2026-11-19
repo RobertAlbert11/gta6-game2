@@ -4,9 +4,10 @@ import { initInput, key, pressed, endFrame, mouse, clearMouse } from './input.js
 import { initAudio, setMusicMode, sfx } from './audio.js';
 import { World, CITY_W, CITY_H, roadsX, roadsY, T } from './world.js';
 import { WORLD, PLAYER, POLICE, clamp, dist2, money$ } from './config.js';
-import { makeState, updatePlayer, updatePeds, updateTraffic, updateEnemies, updateBullets, updateParticles, updateDirector, spawnTrafficCar, spawnPed, exitCar, damagePlayer, puff, addHeat } from './entities.js';
+import { makeState, updatePlayer, updatePeds, updateTraffic, updateEnemies, updateBullets, updateParticles, updateDirector, spawnTrafficCar, spawnPed, spawnPoliceCar, exitCar, damagePlayer, puff, addHeat } from './entities.js';
 import { draw } from './render.js';
 import { Hud } from './hud.js';
+import { setMinimapLabel } from './minimap.js';
 import { initSpots, spots, setupActivities, updateActivities, updateStunts, MISSIONS, missionState, updateMission, activityProgress, ACTIVITIES } from './missions.js';
 import { saveGame, loadGame, slotInfo, bindRefs } from './save.js';
 
@@ -16,6 +17,7 @@ initInput(canvas);
 initAudio();
 
 let world = null, state = null, hud = null;
+let worldSeed = 7;
 let mode = 'menu'; // menu | play | dead | busted | pause | save | controls
 let prevMode = 'play';
 let menuSel = 0;
@@ -31,7 +33,7 @@ resize();
 // ---------------------------------------------------------------- game lifecycle
 
 function newGame() {
-  world = new World(7);
+  world = new World(worldSeed);
   state = makeState(world);
   initSpots(world);
   setupActivities(world, state);
@@ -105,6 +107,10 @@ function update(dt) {
   // music mode by time + heat
   const phase = (state.clock >= 6 && state.clock < 19) ? 'day' : 'night';
   setMusicMode(Math.floor(p.wanted) >= 1 ? 'chase' : phase);
+
+  // minimap district label
+  const district = world.districtAt ? world.districtAt(p.x, p.y) : null;
+  setMinimapLabel(typeof district === 'string' ? district : district?.name ?? '');
 
   // death / busted
   if (!p.alive) { mode = 'dead'; show('deadPanel', true); }
@@ -295,6 +301,8 @@ document.getElementById('btnBack').onclick = () => {
 // ---------------------------------------------------------------- screenshots hook (?shot=)
 
 const q = new URLSearchParams(location.search);
+const seedQ = Number(q.get('seed'));
+if (Number.isFinite(seedQ) && seedQ > 0) worldSeed = seedQ;
 if (q.get('shot')) {
   const which = q.get('shot');
   window.addEventListener('load', () => {
@@ -303,15 +311,29 @@ if (q.get('shot')) {
         // menu stays up
       } else {
         if (!world) newGame();
+        hideAll(); // the menu panel starts visible; drop it so play shots see the city
         if (which === 'play') {
           state.clock = 21.5; // neon night
           const car = spawnTrafficCar(state, { x: state.player.x + 60, y: state.player.y, dir: 0 });
           state.player.inCar = car;
         }
-        if (which === 'end') {
-          state.clock = 22;
+        if (which === 'dusk') {
+          state.clock = 18.4; // golden-hour tint
+          const car = spawnTrafficCar(state, { x: state.player.x - 90, y: state.player.y - 40, dir: 0 });
+          car.lights = true;
+          state.player.inCar = car;
+        }
+        if (which === 'chase' || which === 'end') {
+          state.clock = 21.8; // night chase under neon + headlights
           state.player.money = 25000;
           for (let k = 0; k < 5; k++) addHeat(state, 1);
+          // put the player in a fast car so the heat spawns a real pursuit
+          const car = spawnTrafficCar(state, { x: state.player.x + 50, y: state.player.y, dir: 0 });
+          state.player.inCar = car;
+          car.speed = 200;
+          // a couple of cruisers right on the bumper for the shot
+          spawnPoliceCar(state, state.player.x, state.player.y);
+          spawnPoliceCar(state, state.player.x, state.player.y);
         }
         mode = 'play';
       }
