@@ -2,18 +2,157 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Neon Coast</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root { --hud:#0ff; --hot:#ff2d78; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#05070d; }
+  body { font-family:'Segoe UI',system-ui,sans-serif; color:#cfe9ff; }
+  canvas#view { display:block; width:100vw; height:100vh; image-rendering:auto; }
+  .layer { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  .hidden { display:none !important; }
+  .panel {
+    background:linear-gradient(160deg,#0a1020e6,#140a24e6);
+    border:1px solid #223a5e; border-radius:14px;
+    box-shadow:0 0 40px #0ff2, 0 0 120px #ff2d7822 inset;
+    padding:36px 44px; text-align:center; max-width:560px;
+  }
+  h1.logo {
+    font-size:56px; letter-spacing:6px; font-weight:800;
+    background:linear-gradient(90deg,#0ff,#7df9ff 40%,#ff2d78);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 30px #0ff6;
+  }
+  .tag { color:#7fa8c9; margin:6px 0 22px; letter-spacing:2px; font-size:13px; }
+  .menu { display:flex; flex-direction:column; gap:10px; align-items:center; }
+  button.mbtn {
+    font:inherit; cursor:pointer; width:280px; padding:10px 0; border-radius:8px;
+    background:#0c1626; color:#cfe9ff; border:1px solid #2a4a73; letter-spacing:1px;
+  }
+  button.mbtn:hover, button.mbtn.sel { background:#12325a; color:#fff; border-color:#0ff; box-shadow:0 0 12px #0ff5; }
+  button.mbtn:disabled { opacity:.35; cursor:default; }
+  .hint { margin-top:18px; font-size:12px; color:#5f7fa0; line-height:1.6; }
+  #hud { position:fixed; inset:0; pointer-events:none; font-size:14px; }
+  .hudTL { position:absolute; top:14px; left:14px; }
+  #minimap { border-radius:10px; border:2px solid #2a4a73; background:#0a1220; display:block; }
+  .hudTR { position:absolute; top:14px; right:16px; text-align:right; }
+  .stars { font-size:22px; letter-spacing:3px; color:#ffd23f; text-shadow:0 0 8px #ffd23f9; min-height:26px; }
+  .money { color:#7CFC98; font-weight:700; font-size:18px; text-shadow:0 0 8px #7cfc9877; }
+  .clockrow { color:#9fc3e0; margin-top:4px; }
+  .bars { margin-top:8px; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .bar { width:150px; height:9px; background:#0a1424cc; border:1px solid #2a4a73; border-radius:5px; overflow:hidden; }
+  .bar > div { height:100%; width:100%; transition:width .18s; }
+  #hpFill { background:linear-gradient(90deg,#ff2d55,#ff7b6b); }
+  #arFill { background:linear-gradient(90deg,#2d7bff,#6fd3ff); }
+  .hudBL { position:absolute; bottom:14px; right:16px; text-align:right; }
+  #speedo { font-size:20px; color:#0ff; text-shadow:0 0 10px #0ff8; }
+  #weap { color:#ffd23f; margin-top:4px; }
+  .hudBC { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); text-align:center; width:60%; }
+  #missionTrack { background:#0a1424cc; border:1px solid #2a4a73; border-radius:8px; padding:6px 14px; display:inline-block; }
+  #missionTrack .mtitle { color:#0ff; font-weight:700; }
+  #missionTrack .mobj { color:#cfe9ff; font-size:13px; }
+  #toasts { position:absolute; bottom:70px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:6px; align-items:center; }
+  .toast { background:#0c1c30d9; border:1px solid #0ff5; border-radius:8px; padding:6px 16px; color:#e8fbff; animation:pop .25s ease; }
+  @keyframes pop { from { transform:scale(.7); opacity:0; } to { transform:scale(1); opacity:1; } }
+  #banner { position:absolute; top:16%; left:50%; transform:translateX(-50%); text-align:center; display:none; }
+  #banner .b1 { font-size:34px; font-weight:800; color:#ffd23f; text-shadow:0 2px 12px #000; letter-spacing:2px; }
+  #banner .b2 { font-size:15px; color:#fff; text-shadow:0 1px 6px #000; margin-top:4px; }
+  #dialog { position:absolute; left:50%; bottom:90px; transform:translateX(-50%); width:520px; background:#0a1424ee; border:1px solid #ffd23f88; border-radius:10px; padding:12px 18px; display:none; }
+  #dialog .who { color:#ffd23f; font-weight:700; }
+  #dialog .say { color:#e6f4ff; font-size:14px; margin-top:4px; }
+  #dialog .cont { color:#5f7fa0; font-size:11px; margin-top:8px; text-align:right; }
+  #phone { position:absolute; right:16px; bottom:110px; width:270px; background:#0a1424ee; border:1px solid #2a4a73; border-radius:12px; padding:10px 12px; display:none; }
+  #phone .pt { color:#0ff; font-weight:700; border-bottom:1px solid #2a4a73; padding-bottom:4px; margin-bottom:6px; }
+  .actrow { display:flex; justify-content:space-between; font-size:12px; padding:3px 2px; color:#bcd9f2; }
+  .actrow .k { color:#ffd23f; }
+  #pausePanel .sub, #savePanel .sub { color:#8fb4d4; font-size:13px; margin:10px 0 16px; }
+  .stat { display:flex; justify-content:space-between; width:320px; margin:3px auto; color:#bcd9f2; font-size:13px; }
+  .stat b { color:#fff; }
+  #savePanel button.mbtn { width:340px; }
+  #deadPanel h1 { color:#ff2d55; text-shadow:0 0 24px #ff2d5588; font-size:44px; letter-spacing:4px; }
+  #bustedPanel h1 { color:#4d9fff; text-shadow:0 0 24px #4d9fff88; font-size:44px; letter-spacing:4px; }
+  #loadWrap { margin-top:10px; color:#5f7fa0; font-size:12px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+<canvas id="view"></canvas>
+
+<div id="hud" class="hidden">
+  <div class="hudTL"><canvas id="minimap" width="190" height="150"></canvas></div>
+  <div class="hudTR">
+    <div class="stars" id="stars"></div>
+    <div class="money" id="money">$0</div>
+    <div class="clockrow" id="clock">08:00 · Day 1</div>
+    <div class="bars">
+      <div class="bar"><div id="hpFill"></div></div>
+      <div class="bar"><div id="arFill"></div></div>
+    </div>
+  </div>
+  <div class="hudBL">
+    <div id="speedo">0 mph</div>
+    <div id="weap">Fists</div>
+  </div>
+  <div class="hudBC">
+    <div id="toasts"></div>
+    <div id="missionTrack" style="display:none"><div class="mtitle"></div><div class="mobj"></div></div>
+    <div id="banner"><div class="b1"></div><div class="b2"></div></div>
+    <div id="dialog"><div class="who"></div><div class="say"></div><div class="cont">[E] continue ▸</div></div>
+    <div id="phone"><div class="pt">ACTIVITIES</div><div id="actList"></div></div>
+  </div>
+</div>
+
+<div id="menu" class="layer">
+  <div class="panel">
+    <h1 class="logo">NEON COAST</h1>
+    <div class="tag">AN OPEN-WORLD CRIME STORY · VESPERA BAY</div>
+    <div class="menu">
+      <button class="mbtn" id="btnNew">NEW GAME</button>
+      <button class="mbtn" id="btnLoad">LOAD GAME</button>
+      <button class="mbtn" id="btnControls">CONTROLS</button>
+    </div>
+    <div class="hint">Steal cars · Run jobs for Sol &amp; Tico · Outrun the VPD<br>WASD move · F attack · E enter/interact · P pause</div>
+  </div>
+</div>
+
+<div id="pausePanel" class="layer hidden">
+  <div class="panel">
+    <h1 class="logo" style="font-size:34px">PAUSED</h1>
+    <div class="sub" id="pauseSub"></div>
+    <div id="pauseStats"></div>
+    <div class="menu" style="margin-top:14px">
+      <button class="mbtn" id="btnResume">RESUME</button>
+      <button class="mbtn" id="btnSave">SAVE GAME</button>
+      <button class="mbtn" id="btnQuit">QUIT TO MENU</button>
+    </div>
+  </div>
+</div>
+
+<div id="savePanel" class="layer hidden">
+  <div class="panel">
+    <h1 class="logo" style="font-size:34px">SAVE / LOAD</h1>
+    <div class="sub">Three slots on this browser's localStorage.</div>
+    <div class="menu">
+      <button class="mbtn" id="sv0">SLOT 1</button>
+      <button class="mbtn" id="sv1">SLOT 2</button>
+      <button class="mbtn" id="sv2">SLOT 3</button>
+      <button class="mbtn" id="btnBack">BACK</button>
+    </div>
+    <div id="loadWrap">Click a slot to save in game · to load from the start menu.</div>
+  </div>
+</div>
+
+<div id="deadPanel" class="layer hidden">
+  <div class="panel"><h1>WASTED</h1><div class="sub">The coast chewed you up. Back on your feet at the hospital.</div>
+  <div class="menu"><button class="mbtn" id="btnRespawn">GET UP</button></div></div>
+</div>
+
+<div id="bustedPanel" class="layer hidden">
+  <div class="panel"><h1>BUSTED</h1><div class="sub">The VPD took a cut of your earnings and your weapons.</div>
+  <div class="menu"><button class="mbtn" id="btnBail">PAY BAIL</button></div></div>
+</div>
+
+<script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -1,53 +1,42 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard + mouse input with edge-triggered "pressed" queries.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+const down = new Set();
+const hit = new Set();
+let mouseX = 0, mouseY = 0, mouseDown = false, mouseHit = false;
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
-
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+export function initInput(canvas) {
+  window.addEventListener('keydown', (e) => {
+    if (BLOCK.has(e.code)) e.preventDefault();
+    if (!down.has(e.code)) hit.add(e.code);
+    down.add(e.code);
   });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+  window.addEventListener('keyup', (e) => down.delete(e.code));
+  window.addEventListener('blur', () => { down.clear(); });
+  window.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
+  window.addEventListener('mousedown', (e) => {
+    if (e.button === 0) { mouseDown = true; mouseHit = true; }
   });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = false; });
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+export const key = (code) => down.has(code);
+export const pressed = (code) => hit.has(code);
+export const anyKey = () => hit.size > 0;
+export const mouse = () => ({ x: mouseX, y: mouseY, down: mouseDown, hit: mouseHit });
+export const clearMouse = () => { mouseHit = false; };
+/** Used by the test/screenshot harness to inject synthetic input. */
+export function injectDown(code) { if (!down.has(code)) hit.add(code); down.add(code); }
+export function injectUp(code) { down.delete(code); }
+
+/** Called once per frame after the game update: edge states reset. */
+export function endFrame() {
+  hit.clear();
+  mouseHit = false;
 }
