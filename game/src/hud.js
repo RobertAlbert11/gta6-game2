@@ -1,10 +1,9 @@
 // HUD: DOM element updates, minimap render, toasts, banners, dialog, phone.
 
-import { WANTED_NAMES, money$, clamp } from './config.js';
-import { WEAPONS } from './config.js';
+import { WANTED_NAMES, WEAPONS, WEATHER, money$, clamp } from './config.js';
 import { skyPhase } from './render.js';
 import { MISSIONS, missionState, nearbyActivities, blipTargets } from './missions.js';
-import { drawMinimap } from './minimap.js';
+import { drawMinimap, minimapZoomName } from './minimap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -77,10 +76,27 @@ export class Hud {
 
   update(state, dt) {
     const p = state.player;
-    // stars
+    // stars + escalation notifications
     const stars = Math.floor(p.wanted);
     this.el.stars.textContent = stars > 0 ? '★'.repeat(stars) + '☆'.repeat(5 - stars) : '';
     this.el.stars.title = WANTED_NAMES[stars] ?? '';
+    if (stars > (this._lastStars ?? 0)) {
+      this.toast(stars >= 5 ? 'APEX HEAT — every unit in Vespera Bay is hunting you!' : 'Wanted: ' + (WANTED_NAMES[stars] ?? stars) + ' — VPD escalation!');
+    }
+    this._lastStars = stars;
+    // weather notifications + HUD chip
+    const wk = state.weather?.kind ?? 'clear';
+    if (wk !== this._lastWeather) {
+      if (wk === 'rain') this.toast('Rain rolling in — roads are slick.');
+      else if (this._lastWeather === 'rain') this.toast('Skies clearing over the bay.');
+      this._lastWeather = wk;
+    }
+    if (!this.wxChip) {
+      this.wxChip = document.createElement('div');
+      this.wxChip.style.cssText = 'color:#8fc3e0;font-size:11px;margin-top:3px;letter-spacing:1px';
+      this.el.clock.parentElement.appendChild(this.wxChip);
+    }
+    this.wxChip.textContent = wk === 'rain' ? '☂ RAIN · grip -' : '☀ CLEAR';
     // money/clock
     this.el.money.textContent = money$(p.money);
     const h = Math.floor(state.clock), m = Math.floor((state.clock - h) * 60);
@@ -103,6 +119,13 @@ export class Hud {
     const w = WEAPONS[p.weapon];
     const ammo = w.ammoMax === Infinity ? '' : ' · ' + (p.ammo[w.id] ?? 0);
     this.el.weap.textContent = p.inCar ? 'Drive-by ready' : w.name + ammo;
+    // minimap zoom tag under the district label (polish pass)
+    if (!this.zoomTag) {
+      this.zoomTag = document.createElement('div');
+      this.zoomTag.style.cssText = 'color:#5f8fb0;font-size:10px;margin-top:2px;text-align:left;letter-spacing:1px';
+      this.el.stars.parentElement.insertBefore(this.zoomTag, this.el.stars.parentElement.firstChild);
+    }
+    this.zoomTag.textContent = 'MMAP ' + minimapZoomName().toUpperCase();
     // mission tracker
     if (missionState.active) {
       this.el.track.style.display = 'inline-block';

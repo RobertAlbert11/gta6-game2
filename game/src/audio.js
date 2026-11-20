@@ -75,6 +75,29 @@ function startMusic() {
   musicTimer = setInterval(musicStep, 240);
 }
 
+// Rain bed: a looping filtered-noise layer whose gain tracks rain intensity.
+let rainGain = null, rainSrc = null;
+export function setRainLevel(level) {
+  if (!ctx) return;
+  if (level > 0.02 && !rainSrc) {
+    const n = ctx.sampleRate * 2;
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    rainSrc = ctx.createBufferSource();
+    rainSrc.buffer = buf; rainSrc.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 5200; f.Q.value = 0.4;
+    rainGain = ctx.createGain(); rainGain.gain.value = 0;
+    rainSrc.connect(f); f.connect(rainGain); rainGain.connect(master);
+    rainSrc.start();
+  }
+  if (rainGain) rainGain.gain.linearRampToValueAtTime(level * 0.16, ctx.currentTime + 0.4);
+  if (level <= 0.02 && rainSrc) {
+    const src = rainSrc; rainSrc = null;
+    setTimeout(() => { try { src.stop(); } catch { /* already stopped */ } }, 600);
+  }
+}
+
 // --- sfx -------------------------------------------------------------------
 export const sfx = {
   shoot(weapon) {
@@ -119,4 +142,25 @@ export const sfx = {
   ui() { tone(880, ctx?.currentTime ?? 0, 0.05, 'square', 0.12); },
   win() { const t = ctx?.currentTime ?? 0; [523, 659, 784, 1046].forEach((f, i) => tone(f, t + i * 0.1, 0.22, 'triangle', 0.25)); },
   fail() { const t = ctx?.currentTime ?? 0; [400, 330, 262, 196].forEach((f, i) => tone(f, t + i * 0.12, 0.2, 'sawtooth', 0.2)); },
+  // polish pass: extra SFX
+  thunder() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 1.4, 0.6, 90);
+    tone(48, t, 1.1, 'sine', 0.4, sfxGain);
+    tone(36, t + 0.12, 0.9, 'sine', 0.3, sfxGain);
+  },
+  rainAmbient(level = 0.2) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.5, 0.05 + level * 0.08, 2600);
+  },
+  carwash() { const t = ctx?.currentTime ?? 0; noise(t, 0.6, 0.25, 1800); tone(1200, t + 0.2, 0.3, 'sine', 0.1); },
+  karaokeNote(good = true) {
+    const t = ctx?.currentTime ?? 0;
+    if (good) { [440, 554, 659].forEach((f, i) => tone(f, t + i * 0.09, 0.18, 'triangle', 0.2)); }
+    else { tone(233, t, 0.4, 'sawtooth', 0.22); tone(220, t + 0.1, 0.35, 'sawtooth', 0.18); }
+  },
+  starUp() { const t = ctx?.currentTime ?? 0; tone(196, t, 0.14, 'square', 0.22); tone(262, t + 0.1, 0.2, 'square', 0.22); },
+  checkpoint() { const t = ctx?.currentTime ?? 0; tone(1046, t, 0.07, 'square', 0.2); tone(1568, t + 0.06, 0.12, 'square', 0.18); },
 };

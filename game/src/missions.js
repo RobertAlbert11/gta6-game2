@@ -23,6 +23,10 @@ export function initSpots(world) {
   spots.boardwalk = { x: roadsX[6] + 20, y: roadsY[19] + 20 };
   spots.aimRange = { x: roadsX[22] + 30, y: roadsY[13] + 30 };
   spots.chessTable = { x: roadsX[2] + 20, y: roadsY[6] + 20 };
+  spots.gridBox = { x: roadsX[20] + 20, y: roadsY[6] - 40, name: 'Tower Grid Box' };
+  spots.carwash = { x: roadsX[15] + 30, y: roadsY[11] - 30, name: 'Splash Auto Spa' };
+  spots.bmxDirt = { x: roadsX[5], y: roadsY[17] };
+  spots.karaoke = { x: roadsX[11] + 30, y: roadsY[1] + 30, name: 'Shrine of Song Karaoke' };
 }
 
 // ---------------------------------------------------------------- mission engine
@@ -140,7 +144,10 @@ export const MISSIONS = [
     id: 'm12', title: 'The Last Neon Light', giver: 'krossTower', from: 'Rio',
     brief: ["Just you and Damien Kross now.", "He is in the penthouse. End the Ember Hand tonight."],
     steps: [
+      { text: 'Cut the tower power grid', blip() { return spots.gridBox; }, check: nearCheck(() => spots.gridBox), setup(s, api) { s._gridZap = 0; }, update(s, dt) { s._gridZap += dt; }, failIf(s) { return s._gridZap > 90; } },
+      { text: 'Take the service elevator up', blip() { return spots.krossTower; }, check: nearCheck(() => spots.krossTower) },
       { text: 'Defeat Damien Kross', setup(s, api) { s._kross = spawnGangster(s, spots.krossTower.x + 40, spots.krossTower.y + 40); s._kross.hp = 260; s._kross.shirt = '#f1f3f7'; s._kross.isKross = true; }, blip(s) { return s._kross; }, check(s) { return !s._kross || !s._kross.alive; } },
+      { text: 'Walk into the neon dawn', check(s) { return dist2(s.player.x, s.player.y, spots.krossTower.x, spots.krossTower.y) > 600 * 600; } },
     ],
     reward: 5000,
   },
@@ -274,6 +281,10 @@ export function setupActivities(world, state) {
   act('spray', "Pay'N'Spray — Respray & Repair", spots.paySpray.x, spots.paySpray.y, 'service', 44, { service: 'spray' });
   act('hospital', 'St. Aurelia — Heal', spots.hospital.x, spots.hospital.y, 'service', 40, { service: 'heal' });
   act('armory', 'Pawn Shop — Buy Weapons', spots.ticoBar.x - 60, spots.ticoBar.y + 40, 'service', 40, { service: 'armory' });
+  // new activity types (polish pass): carwash service + two extra minigames
+  act('carwash', 'Splash Auto Spa — Full Wash', spots.carwash.x, spots.carwash.y, 'service', 40, { service: 'carwash' });
+  act('karaoke', 'Shrine of Song — Karaoke Night', spots.karaoke.x, spots.karaoke.y, 'mini', 36, { mini: 'karaoke' });
+  act('bmx', 'Dirt Jump Park — BMX Time Trial', spots.bmxDirt.x, spots.bmxDirt.y, 'mini', 40, { mini: 'bmx' });
   // boardwalk extras: beach vendors, busker, etc.
   for (let k = 0; k < 6; k++) {
     act('vnd' + k, ['Hot Dog Stand', 'Coconut Stand', 'Souvenir Kiosk', 'Busker Tip', ' Tattoo Parlor', 'Beach Volley'][k], 100 + k * (CITY_W - 200) / 5, roadsY[19] + 60, 'mini', 30, { mini: 'vendor' });
@@ -479,6 +490,18 @@ function playMini(state, a, api) {
     const roll = R();
     if (roll < 0.4) { p.hp = Math.min(100, p.hp + 15); api.toast('Street food. +15 HP.'); }
     else { p.money -= 10; api.toast('Tip the busker. -$10, +karma.'); }
+  } else if (a.mini === 'karaoke') {
+    const roll = R();
+    if (roll < 0.3) { p.money += 250; api.toast('The crowd chants your name! Encore pays $250.'); sfx.cash(); }
+    else if (roll < 0.7) { p.money += 60; api.toast('Solid set. Tips: $60.'); sfx.cash(); }
+    else api.toast('You butchered the chorus. The mic is confiscated.');
+  } else if (a.mini === 'bmx') {
+    if (p.inCar) { api.toast('Ditch the car. The dirt park is pedal-powered.'); return; }
+    p.aimScore += 5;
+    const pay = 90 + Math.floor(R() * 120);
+    p.money += pay;
+    api.toast('BMX time trial done. ' + money$(pay) + ' and a scraped knee.');
+    sfx.cash();
   }
 }
 
@@ -498,6 +521,15 @@ function doService(state, a, api) {
     if (p.money >= 250 && p.ammo.smg < 40) { p.money -= 250; p.ammo.smg += 40; api.toast('SMG ammo restocked (-$250).'); sfx.pickup(); }
     else if (p.money >= 400 && p.ammo.shotgun < 12) { p.money -= 400; p.ammo.shotgun += 12; api.toast('Shells bought (-$400).'); sfx.pickup(); }
     else if (p.money >= 120 && p.ammo.pistol < 60) { p.money -= 120; p.ammo.pistol += 36; api.toast('Pistol ammo (-$120).'); sfx.pickup(); }
+  } else if (a.service === 'carwash') {
+    if (!p.inCar) { api.toast('Splash Auto Spa washes cars, not sneakers.'); return; }
+    if (p.money >= 60) {
+      p.money -= 60;
+      p.inCar.hp = Math.min(100, p.inCar.hp + 35);
+      p.inCar.color = ['#5fb8ff', '#c17ec4', '#57a05e', '#f7c531'][Math.floor(R() * 4)];
+      api.toast('Waxed and gleaming. +35 car HP, fresh coat (-$60).');
+      sfx.pickup();
+    } else api.toast('The wash costs $60. Pocket change only, huh?');
   }
 }
 

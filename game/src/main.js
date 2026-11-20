@@ -1,13 +1,13 @@
 // Neon Coast — game bootstrap, loop, menus, camera, day/night, screenshots hook.
 
-import { initInput, key, pressed, endFrame, mouse, clearMouse } from './input.js';
-import { initAudio, setMusicMode, sfx } from './audio.js';
+import { initInput, key, pressed, endFrame, mouse, clearMouse, BINDINGS } from './input.js';
+import { initAudio, setMusicMode, setRainLevel, sfx } from './audio.js';
 import { World, CITY_W, CITY_H, roadsX, roadsY, T } from './world.js';
-import { WORLD, PLAYER, POLICE, clamp, dist2, money$ } from './config.js';
+import { WORLD, PLAYER, POLICE, WEATHER, clamp, dist2, money$ } from './config.js';
 import { makeState, updatePlayer, updatePeds, updateTraffic, updateEnemies, updateBullets, updateParticles, updateDirector, spawnTrafficCar, spawnPed, spawnPoliceCar, exitCar, damagePlayer, puff, addHeat } from './entities.js';
-import { draw } from './render.js';
+import { draw, updateWeather } from './render.js';
 import { Hud } from './hud.js';
-import { setMinimapLabel } from './minimap.js';
+import { setMinimapLabel, cycleMinimapZoom } from './minimap.js';
 import { initSpots, spots, setupActivities, updateActivities, updateStunts, MISSIONS, missionState, updateMission, activityProgress, ACTIVITIES } from './missions.js';
 import { saveGame, loadGame, slotInfo, bindRefs } from './save.js';
 
@@ -39,6 +39,8 @@ function newGame() {
   setupActivities(world, state);
   hud = hud ?? new Hud(canvas);
   bindRefs(missionState, ACTIVITIES);
+  // dynamic weather kicks off clear; the director rolls dice later
+  state.weather = { kind: 'clear', level: 0, timer: 40 + Math.random() * 90 };
   // seed initial traffic and peds near the player
   for (let k = 0; k < 10; k++) {
     const s = world.spawns.cars[Math.floor(Math.random() * world.spawns.cars.length)];
@@ -82,6 +84,25 @@ function update(dt) {
   // pause / phone / save
   if (pressed('KeyP') || pressed('Escape')) openPause();
   if (pressed('KeyM')) { state.phoneOpen = !state.phoneOpen; sfx.ui(); }
+  // polish pass: minimap zoom cycle + quick save/load keybinds
+  if (pressed(BINDINGS.zoomCycle)) { const z = cycleMinimapZoom(1); sfx.ui(); state._zoomToast = z; }
+  if (pressed('F5')) { saveGame(0, state); hud.toast('Quick-saved to slot 1'); sfx.pickup(); }
+  if (pressed('F9')) { const ok = loadGame(0, state); hud.toast(ok ? 'Quick-loaded slot 1' : 'Slot 1 is empty'); sfx.ui(); }
+
+  // dynamic weather director: roll clear ↔ rain every so often
+  const wtx = state.weather;
+  if (wtx) {
+    wtx.timer -= dt;
+    if (wtx.timer <= 0) {
+      wtx.timer = WEATHER.changeEvery[0] + Math.random() * (WEATHER.changeEvery[1] - WEATHER.changeEvery[0]);
+      const toRain = wtx.kind !== 'rain' && Math.random() < WEATHER.rainChance;
+      const toClear = wtx.kind === 'rain' && Math.random() < 0.45;
+      if (toRain) { wtx.kind = 'rain'; wtx.level = 0.5 + Math.random() * 0.5; }
+      else if (toClear) { wtx.kind = 'clear'; wtx.level = 0; }
+    }
+  }
+  updateWeather(state, dt, state.cam, canvas.width, canvas.height);
+  setRainLevel(state.weather?.kind === 'rain' ? (state.weather.level ?? 1) : 0);
 
   updatePlayer(state, inputApi(), dt);
   updatePeds(state, dt);
@@ -245,7 +266,7 @@ document.getElementById('btnSave').onclick = () => { saveMode = 'save'; show('pa
 let saveMode = 'save';
 document.getElementById('btnLoad').onclick = () => { saveMode = 'load'; openSave(); };
 document.getElementById('btnControls').onclick = () => {
-  alert('WASD move · Shift sprint · F attack · 1-4 weapons · E enter/interact · Space brake/handbrake · H horn · Q headlights · M activities · P pause');
+  alert('WASD move · Shift sprint · F attack · 1-4 weapons · E enter/interact · Space brake/handbrake · H horn · Q headlights · C minimap zoom · F5 quick-save · F9 quick-load · M activities · P pause');
 };
 document.getElementById('btnNew').onclick = () => { hideAll(); newGame(); };
 document.getElementById('btnRespawn').onclick = () => {
@@ -334,6 +355,18 @@ if (q.get('shot')) {
           // a couple of cruisers right on the bumper for the shot
           spawnPoliceCar(state, state.player.x, state.player.y);
           spawnPoliceCar(state, state.player.x, state.player.y);
+        }
+        if (which === 'rain') {
+          // storm shot: night rain + headlights for the weather pass
+          state.clock = 22.2;
+          state.weather = { kind: 'rain', level: 0.9, timer: 999 };
+          const car = spawnTrafficCar(state, { x: state.player.x + 60, y: state.player.y, dir: 0 });
+          car.lights = true;
+          state.player.inCar = car;
+          car.speed = 150;
+        }
+        if (which === 'day') {
+          state.clock = 10.5; // bright morning for the city day view
         }
         mode = 'play';
       }

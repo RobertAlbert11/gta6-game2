@@ -2,7 +2,24 @@
 // Coordinates are world units; one tile = WORLD.tile units. The grid is cols x rows
 // of blocks separated by roads; y grows downward, beach at high y.
 
-import { WORLD, DISTRICTS, rng } from './config.js';
+import { WORLD, DISTRICTS, DISTRICT_FLAVOR, rng } from './config.js';
+
+// District-flavored props: each block decorates itself with items matching its
+// district (crates at the docks, benches in parks, neon planters on the strip...).
+const DISTRICT_PROPS = {
+  'Old Wharf':   ['crate', 'barrel', 'bollard'],
+  'Neon Strip':  ['planter', 'signpost', 'bench'],
+  'Palm Heights': ['hedge', 'fountain', 'bench'],
+  'The Docks':   ['container', 'crate', 'winch'],
+  'Sunfield':    ['bench', 'hydrant', 'trashcan'],
+  'Marina Beach': ['umbrella', 'towel', 'cooler'],
+};
+const PROP_COLORS = {
+  crate: '#8a6a42', barrel: '#5a6a72', bollard: '#4a4e56', planter: '#3f6a46',
+  signpost: '#6a7482', bench: '#7a5a3a', hedge: '#2c5232', fountain: '#5a7a8a',
+  container: '#8a3a3a', winch: '#5a5a66', hydrant: '#c14b4b', trashcan: '#4a5560',
+  umbrella: '#ff8c5a', towel: '#5ab8ff', cooler: '#d9d9e2',
+};
 
 export const T = WORLD.tile;
 const COLS = WORLD.cols, ROWS = WORLD.rows;
@@ -88,6 +105,19 @@ export class World {
           this.spawns.cars.push({ x: bx, y: by, parked: true });
         }
         this.blocks.push(block);
+        // district-flavored props scattered on the block (2-4 per block)
+        const flavor = DISTRICT_PROPS[d?.name] ?? DISTRICT_PROPS['Sunfield'];
+        const nProps = 2 + Math.floor(R() * 3);
+        for (let k = 0; k < nProps; k++) {
+          const kind = flavor[Math.floor(R() * flavor.length)];
+          block.props.push({
+            kind,
+            x: bx + (R() - 0.5) * (block.w - 18),
+            y: by + (R() - 0.5) * (block.h - 18),
+            color: PROP_COLORS[kind] ?? '#777',
+            rot: R() * Math.PI,
+          });
+        }
         // street lamps at block corners
         if ((cj + ci) % 2 === 0) this.lamps.push({ x: roadsX[cj] + 10, y: roadsY[ci] + 10 });
       }
@@ -109,6 +139,19 @@ export class World {
         this.neons.push({ x: bd.x + bd.w / 2, y: bd.y + bd.h, text: words[Math.floor(R() * words.length)], color: ['#ff2d78', '#0ff', '#ffd23f', '#7dff9a'][Math.floor(R() * 4)] });
         bd.neon = false;
       }
+    }
+    // beach umbrellas + lifeguard towers along the sand
+    for (let k = 0; k < 10; k++) {
+      this.umbrellas = this.umbrellas ?? [];
+      this.umbrellas.push({
+        x: 80 + R() * (CITY_W - 160),
+        y: roadsY[ROWS - WORLD.beachRows] + 70 + R() * (WORLD.beachRows * T - 120),
+        color: ['#ff5f7a', '#5fb8ff', '#ffd23f', '#7dff9a'][Math.floor(R() * 4)],
+      });
+    }
+    for (let k = 0; k < 3; k++) {
+      this.towers = this.towers ?? [];
+      this.towers.push({ x: 200 + k * (CITY_W - 400) / 2, y: roadsY[ROWS - 1] + 20 });
     }
     // ped + traffic spawn points on sidewalks and roads
     for (let k = 0; k < 220; k++) {

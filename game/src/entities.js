@@ -397,8 +397,10 @@ function drivePlayer(state, input, dt) {
 
 export function stepCarPhysics(state, c, throttle, steer, handbrake, dt, maxSpd) {
   const cls = CAR.classes[c.vtype] ?? { speed: 1, turn: 1 };
-  const top = Math.min(maxSpd * cls.speed, maxSpd * 1.3);
-  const grip = handbrake ? 0.965 : CAR.grip;
+  // rain-slick roads: grip drops with weather wetness
+  const wet = state.weather?.kind === 'rain' ? (state.weather.level ?? 0) * 0.16 : 0;
+  const top = Math.min(maxSpd * cls.speed * (1 - wet * 0.12), maxSpd * 1.3);
+  const grip = handbrake ? 0.965 + wet * 0.008 : CAR.grip - wet * 0.05;
   if (throttle > 0) c.speed += CAR.accel * dt * (c.speed < 0 ? 2 : 1);
   else if (throttle < 0) c.speed -= (c.speed > 0 ? CAR.brake : CAR.accel * 0.6) * dt;
   if (handbrake) c.speed -= CAR.brake * 0.7 * dt;
@@ -592,11 +594,14 @@ function policeCarAI(state, c, dt) {
   if (p.wanted >= 4 && d < 400) want = POLICE.chaseSpeed + 40;
   if (c.speed < want) c.speed = Math.min(want, c.speed + 220 * dt);
   else c.speed = Math.max(want, c.speed - 300 * dt);
-  if (d < 60 && p.inCar && Math.abs(c.speed) > 150) damageCar(state, p.inCar, 6, false);
+  // ram damage scales with the wanted level (escalation ladder)
+  const star = clamp(Math.floor(p.wanted), 0, POLICE.ramDamage.length - 1);
+  if (d < 60 && p.inCar && Math.abs(c.speed) > 150) damageCar(state, p.inCar, POLICE.ramDamage[star], false);
   if (p.wanted >= 3 && d < POLICE.fireRange) {
     c.fireCd = (c.fireCd ?? 1) - dt;
     if (c.fireCd <= 0) {
-      c.fireCd = 1.1 + R() * 0.6;
+      const esc = POLICE.escalation[Math.min(Math.floor(p.wanted), POLICE.escalation.length - 1)];
+      c.fireCd = esc.fireDelay + R() * 0.5;
       const aim = desired + (R() - 0.5) * 0.15;
       fireBullet(state, c.x + Math.cos(aim) * 20, c.y + Math.sin(aim) * 20, aim, WEAPONS[2], false, c);
     }
@@ -750,11 +755,13 @@ export function updateDirector(state, dt) {
   const wanted = Math.floor(p.wanted);
   state.copBudget = (state.copBudget ?? 0) - dt;
   if (wanted >= 1 && state.copBudget <= 0) {
-    state.copBudget = 4 - wanted * 0.5;
+    // escalation ladder from config: more stars, faster response, bigger force
+    const esc = POLICE.escalation[Math.min(wanted, POLICE.escalation.length - 1)];
+    state.copBudget = esc.carBudget;
     const cars = state.cars.filter((c) => c.driver === 'cop' && c.alive).length;
     const cops = state.enemies.filter((e) => e.kind === 'cop' && e.alive).length;
-    if (wanted >= 2 && cars < wanted - 1) spawnPoliceCar(state, px, py);
-    if (cops < wanted * 2) spawnCop(state, px, py);
+    if (cars < esc.copCars) spawnPoliceCar(state, px, py);
+    if (cops < esc.cops) spawnCop(state, px, py);
   }
   if (wanted >= 1 && state.sirenTimer <= 0) {
     sfx.siren();
@@ -762,4 +769,9 @@ export function updateDirector(state, dt) {
   }
   if (!seenByCop(state)) coolHeat(state, dt * 1.4);
   else p.heat = Math.max(p.heat, 1.5);
+  // 5-star apex heat: a wanted-star ping on the minimap budget — sirens everywhere
+  if (wanted >= 5 && !state._apexPing) {
+    state._apexPing = true;
+    sfx.starUp();
+  } else if (wanted < 5) state._apexPing = false;
 }

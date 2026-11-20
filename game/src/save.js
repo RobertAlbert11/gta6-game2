@@ -6,7 +6,7 @@ const META = 'neon-coast-meta';
 export function saveGame(slot, state) {
   const p = state.player;
   const data = {
-    v: 1, when: Date.now(),
+    v: 2, when: Date.now(),
     player: {
       x: p.x, y: p.y, hp: p.hp, armor: p.armor, money: p.money, weapon: p.weapon,
       ammo: p.ammo, wanted: p.wanted, kills: p.kills, jacked: p.jacked,
@@ -16,6 +16,9 @@ export function saveGame(slot, state) {
       stamina: p.stamina,
     },
     clock: state.clock, day: state.day,
+    // polish-pass metadata: weather snapshot + play session stats for the slot list
+    weather: state.weather?.kind ?? 'clear',
+    stats: { distance: Math.floor(state.stats?.distance ?? 0), earned: Math.floor(state.stats?.earned ?? 0) },
     ongoing: {
       raceNext: state._race ? state._race.next : null,
       rampageKills: state._rampage ? state._rampage.kills : null,
@@ -27,7 +30,7 @@ export function saveGame(slot, state) {
     activities: activitiesDoneRef(),
   };
   localStorage.setItem(KEY + slot, JSON.stringify(data));
-  localStorage.setItem(META, JSON.stringify({ last: slot }));
+  localStorage.setItem(META, JSON.stringify({ last: slot, days: state.day, savedAt: Date.now() }));
   return data;
 }
 
@@ -41,6 +44,9 @@ export function loadGame(slot, state) {
     p.stamina = data.player.stamina ?? 100;
     state.clock = data.clock;
     state.day = data.day;
+    // v2 saves carry weather + distance stats; older saves fall back gracefully
+    state.weather = data.weather ? { kind: data.weather, level: data.weather === 'rain' ? 1 : 0 } : state.weather;
+    if (data.stats) state.stats = { ...state.stats, ...data.stats };
     // ongoing events are dropped on load: mid-race saves resume at free roam
     state._race = null; state._delivery = null; state._rampage = null;
     const ms = missionStateRef();
@@ -58,7 +64,10 @@ export function slotInfo(slot) {
   if (!raw) return null;
   try {
     const d = JSON.parse(raw);
-    return { when: d.when, money: d.player.money, missions: d.player.missionsDone };
+    return {
+      when: d.when, money: d.player.money, missions: d.player.missionsDone,
+      day: d.day, weather: d.weather, distance: d.stats?.distance ?? 0,
+    };
   } catch { return null; }
 }
 

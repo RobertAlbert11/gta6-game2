@@ -1,9 +1,80 @@
 // Rendering: top-down canvas painter for the city, actors, night lights, weather.
 
-import { WORLD, COLORS } from './config.js';
+import { WORLD, COLORS, WEATHER } from './config.js';
 import { T, CITY_W, CITY_H, roadsX, roadsY } from './world.js';
 
 const ROWS = WORLD.rows;
+
+// --- rain weather -----------------------------------------------------------
+// state.weather = { kind: 'clear'|'rain', level: 0..1 (smoothed), drops: [{x,y,vx,vy,len}], boltT, nextBolt }
+const rainState = { drops: [], bolt: 0, boltGlow: 0 };
+
+/** Advance rain simulation: drop pool, lightning flash timer. */
+export function updateWeather(state, dt, cam, w, h) {
+  const wt = state.weather ?? { kind: 'clear', level: 0 };
+  const target = wt.kind === 'rain' ? wt.level ?? 1 : 0;
+  rainState.level = (rainState.level ?? 0) + (target - (rainState.level ?? 0)) * Math.min(1, dt / 1.2);
+  const want = Math.ceil(WEATHER.maxDrops * rainState.level);
+  const ang = WEATHER.dropAngle;
+  const spd = WEATHER.dropSpeed;
+  while (rainState.drops.length < want) {
+    rainState.drops.push({
+      x: cam.x + (Math.random() - 0.5) * (w + 400),
+      y: cam.y + (Math.random() - 0.5) * (h + 400),
+      vx: Math.sin(ang) * spd * (0.85 + Math.random() * 0.3),
+      vy: Math.cos(ang) * spd * (0.85 + Math.random() * 0.3),
+      len: 9 + Math.random() * 11,
+    });
+  }
+  if (rainState.drops.length > want) rainState.drops.length = want;
+  for (const d of rainState.drops) {
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    // recycle drops that leave the viewport
+    if (Math.abs(d.x - cam.x) > w / 2 + 240 || Math.abs(d.y - cam.y) > h / 2 + 240) {
+      d.x = cam.x + (Math.random() - 0.5) * (w + 400);
+      d.y = cam.y - h / 2 - 40 + Math.random() * 80;
+    }
+  }
+  // lightning: only during real rain and mostly at night
+  rainState.bolt = Math.max(0, rainState.bolt - dt * 2.6);
+  if (wt.kind === 'rain' && rainState.level > 0.55) {
+    rainState.nextBolt = (rainState.nextBolt ?? WEATHER.lightningMinGap) - dt;
+    if (rainState.nextBolt <= 0) {
+      rainState.nextBolt = WEATHER.lightningMinGap + Math.random() * 10;
+      rainState.bolt = 1;
+      rainState.boltGlow = 0.55 + Math.random() * 0.35;
+    }
+  }
+}
+
+export function isRaining(state) {
+  return (state.weather?.kind === 'rain' && (rainState.level ?? 0) > 0.15) ? rainState.level : 0;
+}
+
+function drawRain(ctx, state, cam, w, h) {
+  const lvl = rainState.level ?? 0;
+  if (lvl < 0.03) return;
+  ctx.save();
+  ctx.strokeStyle = `rgba(170,200,255,${0.16 + lvl * 0.22})`;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (const d of rainState.drops) {
+    if (off(d.x, d.y, cam, w, h)) continue;
+    ctx.moveTo(d.x, d.y);
+    ctx.lineTo(d.x - d.vx * 0.016, d.y - d.vy * 0.016);
+  }
+  ctx.stroke();
+  ctx.restore();
+  // wet-road sheen + occasional lightning flash over the whole viewport
+  if (lvl > 0.4) {
+    ctx.fillStyle = `rgba(60,90,140,${WEATHER.puddleAlpha * (lvl - 0.4)})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (rainState.bolt > 0) {
+    ctx.fillStyle = `rgba(220,235,255,${rainState.bolt * (rainState.boltGlow ?? 0.6) * 0.42})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+}
 
 function mix(c1, c2, t) {
   const p = (c) => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
@@ -80,6 +151,9 @@ export function draw(ctx, cam, world, state, w, h) {
   drawActors(ctx, state, pal, cam, w, h);
 
   ctx.restore();
+
+  // rain falls in screen space over the world; lightning flash tops it off
+  drawRain(ctx, state, cam, w, h);
 
   // dawn/dusk tint gradient wash across the whole viewport
   if (pal.tint) {
@@ -202,6 +276,27 @@ function drawBlocks(ctx, world, pal, cam, w, h) {
       ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
       ctx.strokeRect(b.x - b.w / 2 + 8, b.y - b.h / 2 + 8, b.w - 16, b.h - 16);
+    }
+    // district props: crates, planters, umbrellas, hydrants...
+    for (const pr of b.props ?? []) {
+      ctx.save();
+      ctx.translate(pr.x, pr.y);
+      ctx.rotate(pr.rot ?? 0);
+      ctx.fillStyle = pr.color ?? '#777';
+      if (pr.kind === 'barrel' || pr.kind === 'trashcan') {
+        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (pr.kind === 'umbrella') {
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(1, 2, 10, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#3a2b1d'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -9); ctx.stroke();
+      } else {
+        ctx.fillRect(-5, -5, 10, 10);
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.fillRect(-5, -5, 10, 3);
+      }
+      ctx.restore();
     }
     for (const bd of b.buildings) {
       ctx.fillStyle = shade(bd.hue, pal);

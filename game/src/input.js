@@ -4,7 +4,7 @@ const down = new Set();
 const hit = new Set();
 let mouseX = 0, mouseY = 0, mouseDown = false, mouseHit = false;
 
-const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
+const BLOCK = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'KeyC', 'KeyR']);
 
 export function initInput(canvas) {
   window.addEventListener('keydown', (e) => {
@@ -40,3 +40,11 @@ export function endFrame() {
   hit.clear();
   mouseHit = false;
 }
+
+// polish pass: quick-save / quick-load + minimap zoom keybinds
+export const BINDINGS = {
+  quickSave: 'F5',
+  quickLoad: 'F9',
+  zoomCycle: 'KeyC',
+  respawnHint: 'KeyR',
+};

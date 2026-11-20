@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Neon Coast</title>
+<title>Neon Coast — Vespera Bay</title>
 <style>
   :root { --hud:#0ff; --hot:#ff2d78; }
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -41,6 +41,8 @@
   .stars { font-size:22px; letter-spacing:3px; color:#ffd23f; text-shadow:0 0 8px #ffd23f9; min-height:26px; }
   .money { color:#7CFC98; font-weight:700; font-size:18px; text-shadow:0 0 8px #7cfc9877; }
   .clockrow { color:#9fc3e0; margin-top:4px; }
+  .stars.flash { animation:starPop .4s ease; }
+  @keyframes starPop { 0% { transform:scale(1.6); } 100% { transform:scale(1); } }
   .bars { margin-top:8px; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
   .bar { width:150px; height:9px; background:#0a1424cc; border:1px solid #2a4a73; border-radius:5px; overflow:hidden; }
   .bar > div { height:100%; width:100%; transition:width .18s; }
@@ -106,13 +108,13 @@
 <div id="menu" class="layer">
   <div class="panel">
     <h1 class="logo">NEON COAST</h1>
-    <div class="tag">AN OPEN-WORLD CRIME STORY · VESPERA BAY</div>
+    <div class="tag">AN OPEN-WORLD CRIME STORY · VESPERA BAY · NOW WITH RAIN</div>
     <div class="menu">
       <button class="mbtn" id="btnNew">NEW GAME</button>
       <button class="mbtn" id="btnLoad">LOAD GAME</button>
       <button class="mbtn" id="btnControls">CONTROLS</button>
     </div>
-    <div class="hint">Steal cars · Run jobs for Sol &amp; Tico · Outrun the VPD<br>WASD move · F attack · E enter/interact · P pause</div>
+    <div class="hint">Steal cars · Run jobs for Sol &amp; Tico · Outrun the VPD · Survive the storm<br>WASD move · F attack · E enter/interact · C minimap zoom · P pause</div>
   </div>
 </div>
 

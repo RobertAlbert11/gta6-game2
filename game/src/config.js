@@ -52,6 +52,29 @@ export const POLICE = {
   bulletDmg: 8,
   wantedDecay: 5.5, // seconds of clean heat per star
   bribe: 400, // $ per star cleared at Pay'N'Spray
+  // escalation ladder: per-star pursuit tuning (units per second, units, seconds)
+  escalation: [
+    { copCars: 0, cops: 0, carBudget: 0, fireDelay: 2.0 },           // 0 stars
+    { copCars: 1, cops: 1, carBudget: 4.5, fireDelay: 1.6 },         // 1 star
+    { copCars: 2, cops: 3, carBudget: 3.6, fireDelay: 1.3 },         // 2 stars
+    { copCars: 3, cops: 5, carBudget: 2.8, fireDelay: 1.0 },         // 3 stars
+    { copCars: 4, cops: 7, carBudget: 2.1, fireDelay: 0.8 },         // 4 stars: roadblocks
+    { copCars: 6, cops: 9, carBudget: 1.5, fireDelay: 0.6 },         // 5 stars: apex heat
+  ],
+  ramDamage: [0, 5, 6, 8, 11, 14], // cop cruiser ram damage by star
+};
+
+// Dynamic weather: clear ↔ overcast ↔ rain (with lightning at night).
+export const WEATHER = {
+  changeEvery: [70, 160],   // seconds between weather rolls (random range)
+  rainChance: 0.34,         // chance a roll turns into rain
+  rampSeconds: 8,           // fade-in/out time for rain intensity
+  maxDrops: 260,            // raindrop particles on screen
+  dropSpeed: 900,           // px/s fall speed
+  dropAngle: -0.32,         // slant of the rain (radians from vertical)
+  gripLoss: 0.16,           // extra slipperiness while raining (0..1)
+  lightningMinGap: 6,       // min seconds between lightning flashes
+  puddleAlpha: 0.30,        // wet-road sheen strength at full rain
 };
 
 export const COLORS = {
@@ -75,6 +98,16 @@ export const DISTRICTS = [
   { name: 'The Docks', x0: 0, x1: 11, y0: 9, y1: 17, tint: '#3a3f52' },
   { name: 'Sunfield', x0: 12, x1: 25, y0: 9, y1: 17, tint: '#4a4436' },
 ];
+
+// District-specific spawn flavor: gang colors + relative cop attention per area.
+export const DISTRICT_FLAVOR = {
+  'Old Wharf':   { gang: '#7a5a2f', heatBias: 0.8, pedRush: 'dockworker' },
+  'Neon Strip':  { gang: '#7a1f3d', heatBias: 1.2, pedRush: 'tourist' },
+  'Palm Heights':{ gang: '#2f5a3d', heatBias: 1.35, pedRush: 'socialite' },
+  'The Docks':   { gang: '#3a3f6e', heatBias: 0.9, pedRush: 'docker' },
+  'Sunfield':    { gang: '#6e5a2a', heatBias: 0.75, pedRush: 'local' },
+  'Marina Beach':{ gang: '#2a5a6e', heatBias: 0.6, pedRush: 'beachgoer' },
+};
 
 export const WANTED_NAMES = ['', 'Suspicious', 'Misdemeanor', 'Felony', 'Manhunt', 'Apex Heat'];
 

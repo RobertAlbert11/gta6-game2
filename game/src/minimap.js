@@ -4,7 +4,19 @@
 import { CITY_W, CITY_H, roadsX, roadsY, T } from './world.js';
 import { ACTIVITIES, blipTargets } from './missions.js';
 
-const ZOOM = 2.6; // minimap px per city tile relative to fit-the-city scale
+// zoom levels: cycling through widens/narrows the view (C toggles in game)
+const ZOOM_LEVELS = [
+  { name: 'street', zoom: 2.6 },   // close: traffic + blips readable
+  { name: 'block', zoom: 1.7 },    // default driving view
+  { name: 'district', zoom: 1.1 }, // wide: district shapes visible
+  { name: 'city', zoom: 0.7 },     // whole-city overview
+];
+let zoomIdx = 1;
+export function cycleMinimapZoom(dir = 1) {
+  zoomIdx = (zoomIdx + dir + ZOOM_LEVELS.length) % ZOOM_LEVELS.length;
+  return ZOOM_LEVELS[zoomIdx].name;
+}
+export const minimapZoomName = () => ZOOM_LEVELS[zoomIdx].name;
 
 const staticMap = { canvas: null, ctx: null, scale: 1 };
 let districtLabel = '';
@@ -61,7 +73,7 @@ export function drawMinimap(outCtx, outCanvas, state, deps = {}) {
   ensureStaticMap();
   const W = outCanvas.width, H = outCanvas.height;
   const p = state.player;
-  const viewScale = Math.min(W / CITY_W, H / CITY_H) * ZOOM * 1.6;
+  const viewScale = Math.min(W / CITY_W, H / CITY_H) * ZOOM_LEVELS[zoomIdx].zoom * 1.6;
   const viewW = W / viewScale, viewH = H / viewScale;
 
   // camera center: follow the player, clamped to city bounds
@@ -156,6 +168,11 @@ export function drawMinimap(outCtx, outCanvas, state, deps = {}) {
   outCtx.lineWidth = 2;
   outCtx.strokeRect(1, 1, W - 2, H - 2);
   outCtx.fillStyle = 'rgba(8,12,26,0.78)';
+  // zoom tag in the corner opposite the district label
+  outCtx.font = '600 9px system-ui';
+  outCtx.textAlign = 'right';
+  outCtx.fillStyle = 'rgba(140,180,220,0.8)';
+  outCtx.fillText('⤢ ' + ZOOM_LEVELS[zoomIdx].name.toUpperCase(), W - 6, 13);
   if (districtLabel) {
     outCtx.font = '600 11px system-ui';
     outCtx.textAlign = 'left';

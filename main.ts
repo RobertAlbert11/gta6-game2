@@ -1,6 +1,9 @@
-// Neon Coast — an open-world crime game set in neon-soaked Vespera Bay (the game/ folder:
-// plain static ES modules, no build step and no network). Steal cars, run missions for fixers
-// and outrun five-star police heat across a full day/night city with a live minimap HUD.
+// Neon Coast — an open-world crime game set in neon-soaked Vespera Bay, now in its
+// polished form: dynamic rain weather with lightning, a four-level minimap zoom, an
+// escalation-ladder police force, district props, quick save keys and karaoke (the
+// game/ folder is plain static ES modules — no build step, no network). You play Rio
+// Delgado: steal cars, run missions for fixers and outrun five-star heat across a
+// full day/night city with a live minimap HUD.
 // This file is only the packaging: it copies game/ and screenshots/ beside it into /output and
 // writes /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 //
