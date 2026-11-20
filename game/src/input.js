@@ -42,9 +42,11 @@ export function endFrame() {
 }
 
 // polish pass: quick-save / quick-load + minimap zoom keybinds
+// expansion pass: radio toggle key
 export const BINDINGS = {
   quickSave: 'F5',
   quickLoad: 'F9',
   zoomCycle: 'KeyC',
   respawnHint: 'KeyR',
+  radio: 'KeyR',
 };

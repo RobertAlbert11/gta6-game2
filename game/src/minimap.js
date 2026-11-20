@@ -173,6 +173,21 @@ export function drawMinimap(outCtx, outCanvas, state, deps = {}) {
   outCtx.textAlign = 'right';
   outCtx.fillStyle = 'rgba(140,180,220,0.8)';
   outCtx.fillText('⤢ ' + ZOOM_LEVELS[zoomIdx].name.toUpperCase(), W - 6, 13);
+  // weather indicator: top-left of the minimap frame (expansion pass)
+  const rainLvl = state.weather?.kind === 'rain' ? (state.weather.level ?? 1) : 0;
+  if (rainLvl > 0) {
+    outCtx.fillStyle = 'rgba(111,184,255,0.9)';
+    outCtx.textAlign = 'left';
+    outCtx.fillText(`☂ ${Math.round(rainLvl * 100)}%`, 6, 13);
+  } else if (state.clock >= 6 && state.clock < 19) {
+    outCtx.fillStyle = 'rgba(255,210,120,0.8)';
+    outCtx.textAlign = 'left';
+    outCtx.fillText('☀', 6, 13);
+  } else {
+    outCtx.fillStyle = 'rgba(150,170,220,0.7)';
+    outCtx.textAlign = 'left';
+    outCtx.fillText('☾', 6, 13);
+  }
   if (districtLabel) {
     outCtx.font = '600 11px system-ui';
     outCtx.textAlign = 'left';

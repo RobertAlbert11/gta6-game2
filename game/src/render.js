@@ -55,15 +55,38 @@ function drawRain(ctx, state, cam, w, h) {
   const lvl = rainState.level ?? 0;
   if (lvl < 0.03) return;
   ctx.save();
-  ctx.strokeStyle = `rgba(170,200,255,${0.16 + lvl * 0.22})`;
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  for (const d of rainState.drops) {
-    if (off(d.x, d.y, cam, w, h)) continue;
-    ctx.moveTo(d.x, d.y);
-    ctx.lineTo(d.x - d.vx * 0.016, d.y - d.vy * 0.016);
+  // two-pass streaks: soft wide streaks + crisp fast cores, denser with level
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.strokeStyle = pass === 0
+      ? `rgba(170,200,255,${0.10 + lvl * 0.14})`
+      : `rgba(210,230,255,${0.14 + lvl * 0.26})`;
+    ctx.lineWidth = pass === 0 ? 2.6 : 1.1;
+    ctx.beginPath();
+    for (let i = 0; i < rainState.drops.length; i++) {
+      const d = rainState.drops[i];
+      if (i % 2 === pass) continue; // split the pool between passes
+      if (off(d.x, d.y, cam, w, h)) continue;
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.vx * 0.022, d.y - d.vy * 0.022);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
+  // splash sparks where drops land (near the bottom half of the viewport)
+  if (lvl > 0.35) {
+    ctx.fillStyle = `rgba(190,215,255,${0.25 * lvl})`;
+    const t = performance.now() / 1000;
+    for (const d of rainState.drops) {
+      if (off(d.x, d.y, cam, w, h)) continue;
+      const cycle = (t * 2.2 + d.x * 0.013 + d.y * 0.007) % 1;
+      if (cycle < 0.86) continue;
+      const k = (cycle - 0.86) / 0.14; // 0..1 splash lifetime
+      ctx.globalAlpha = (1 - k) * 0.5 * lvl;
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y + 26, 1.5 + k * 4, 0.6 + k * 1.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
   // wet-road sheen + occasional lightning flash over the whole viewport
   if (lvl > 0.4) {
@@ -74,6 +97,44 @@ function drawRain(ctx, state, cam, w, h) {
     ctx.fillStyle = `rgba(220,235,255,${rainState.bolt * (rainState.boltGlow ?? 0.6) * 0.42})`;
     ctx.fillRect(0, 0, w, h);
   }
+}
+
+/** Puddles: static ellipses seeded per block; only exist while the ground is wet. */
+const puddleField = [];
+function drawPuddles(ctx, cam, w, h, lvl) {
+  if (lvl < 0.12) return;
+  if (!puddleField.length) {
+    // build a deterministic puddle field on first wet frame
+    let a = 987654321;
+    const next = () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; };
+    for (let k = 0; k < 220; k++) {
+      puddleField.push({
+        x: next() * CITY_W, y: next() * CITY_H,
+        rx: 14 + next() * 30, ry: 6 + next() * 12,
+        rot: next() * Math.PI, shimmer: next() * 10,
+      });
+    }
+  }
+  ctx.save();
+  ctx.translate(cam.x, cam.y); // screen-space wobble via relative position below
+  ctx.translate(-cam.x, cam.y - cam.y); // no-op keep; puddles drawn in world coords
+  ctx.restore();
+  const t = performance.now() / 1000;
+  for (const pd of puddleField) {
+    if (off(pd.x, pd.y, cam, w, h)) continue;
+    ctx.save();
+    ctx.translate(pd.x, pd.y);
+    ctx.rotate(pd.rot);
+    ctx.globalAlpha = Math.min(0.5, lvl * 0.5) * (0.75 + 0.25 * Math.sin(t * 1.7 + pd.shimmer));
+    ctx.fillStyle = 'rgba(40,70,120,0.55)';
+    ctx.beginPath(); ctx.ellipse(0, 0, pd.rx, pd.ry, 0, 0, Math.PI * 2); ctx.fill();
+    // neon-ish reflection streak inside the puddle (skylight + neon tint)
+    ctx.globalAlpha = Math.min(0.35, lvl * 0.3);
+    ctx.fillStyle = 'rgba(140,190,255,0.5)';
+    ctx.beginPath(); ctx.ellipse(-pd.rx * 0.2, -pd.ry * 0.2, pd.rx * 0.45, pd.ry * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function mix(c1, c2, t) {
@@ -147,6 +208,7 @@ export function draw(ctx, cam, world, state, w, h) {
   drawGround(ctx, pal);
   drawRoads(ctx, cam, pal, w, h);
   drawBeach(ctx, world, pal);
+  drawPuddles(ctx, cam, w, h, isRaining(state));
   drawBlocks(ctx, world, pal, cam, w, h);
   drawActors(ctx, state, pal, cam, w, h);
 
@@ -279,11 +341,13 @@ function drawBlocks(ctx, world, pal, cam, w, h) {
     }
     // district props: crates, planters, umbrellas, hydrants...
     for (const pr of b.props ?? []) {
+      // interior machinery/furniture hides inside buildings: skip unless a lot/park
+      if (pr.interior && b.kind === 'building') continue;
       ctx.save();
       ctx.translate(pr.x, pr.y);
       ctx.rotate(pr.rot ?? 0);
       ctx.fillStyle = pr.color ?? '#777';
-      if (pr.kind === 'barrel' || pr.kind === 'trashcan') {
+      if (pr.kind === 'barrel' || pr.kind === 'trashcan' || pr.kind === 'oilbarrel') {
         ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
       } else if (pr.kind === 'umbrella') {
@@ -291,6 +355,14 @@ function drawBlocks(ctx, world, pal, cam, w, h) {
         ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#3a2b1d'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -9); ctx.stroke();
+      } else if (pr.kind === 'pipestack' || pr.kind === 'servercrate' || pr.kind === 'spool' || pr.kind === 'gantry' || pr.kind === 'antenna' || pr.kind === 'cablecoil') {
+        // larger industrial silhouettes (8-14px) with a top highlight
+        const s = pr.kind === 'gantry' ? 14 : 9;
+        ctx.fillRect(-s / 2, -s / 2, s, s);
+        ctx.fillStyle = 'rgba(255,255,255,0.16)';
+        ctx.fillRect(-s / 2, -s / 2, s, 3);
+        if (pr.kind === 'antenna') { ctx.strokeStyle = '#cfd8e4'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, s / 2); ctx.lineTo(0, -s); ctx.stroke(); }
+        if (pr.kind === 'spool') { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, s / 2.6, 0, Math.PI * 2); ctx.stroke(); }
       } else {
         ctx.fillRect(-5, -5, 10, 10);
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
@@ -490,6 +562,8 @@ const CAR_BODIES = {
   van: ['#8a8f99', '#6a7a8a', '#9a8a6a'],
   taxi: ['#f7c531'],
   police: ['#22337a'],
+  bike: ['#57a05e', '#c14b4b', '#4b7bc1'],
+  truck: ['#6a7a8a', '#8a6a42', '#5a6a72'],
 };
 
 function drawCar(ctx, c, night) {
@@ -497,8 +571,10 @@ function drawCar(ctx, c, night) {
   ctx.translate(c.x, c.y);
   ctx.rotate(c.dir + Math.PI / 2);
   const L = c.len, W = c.wid;
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  // soft contact shadow: layered ellipse reads rounder than a flat rect
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath(); ctx.ellipse(2, 4, W * 0.62, L * 0.56, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(-W / 2 + 2, -L / 2 + 3, W, L);
   // body
   let bodyCol = c.color;
@@ -521,6 +597,19 @@ function drawCar(ctx, c, night) {
     ctx.fillStyle = bar ? '#ff3355' : '#3355ff';
     ctx.fillRect(-W / 2 + 3, -2, W - 6, 4);
     if (bar) { ctx.fillStyle = 'rgba(255,60,90,0.5)'; ctx.fillRect(-W, -30, W * 2, 60); }
+  }
+  if (c.vtype === 'truck' && !c.burnt) {
+    // cab-over look: nose band + container ribs down the bed
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(-W / 2 + 2, -L / 2 + 2, W - 4, 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let ry = -L / 2 + 12; ry < L / 2 - 8; ry += 6) ctx.fillRect(-W / 2 + 3, ry, W - 6, 2);
+  }
+  if (c.vtype === 'bike' && !c.burnt) {
+    // handlebar + rider hump over the frame
+    ctx.fillStyle = '#1a1e28'; ctx.fillRect(-W / 2 - 1, -L / 2 + 4, W + 2, 3);
+    ctx.fillStyle = c.color; ctx.beginPath(); ctx.arc(0, 2, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8e8f0'; ctx.fillRect(-2, -2, 4, 5);
   }
   if (c.siren && c.vtype === 'police') {
     const t = performance.now() / 120;

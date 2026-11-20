@@ -27,6 +27,19 @@ export function initSpots(world) {
   spots.carwash = { x: roadsX[15] + 30, y: roadsY[11] - 30, name: 'Splash Auto Spa' };
   spots.bmxDirt = { x: roadsX[5], y: roadsY[17] };
   spots.karaoke = { x: roadsX[11] + 30, y: roadsY[1] + 30, name: 'Shrine of Song Karaoke' };
+  // expansion pass: spots for the two new districts + new activities
+  spots.foundry = { x: roadsX[2] + 30, y: roadsY[12] + 30, name: 'Vulcan Foundry' };
+  spots.hexon = { x: roadsX[22] + 30, y: roadsY[12] + 30, name: 'Hexon Dataworks' };
+  spots.taxiStand = { x: roadsX[10] + 20, y: roadsY[5] + 20, name: 'Strip Taxi Rank' };
+  spots.bountyBoard = { x: roadsX[13] + 30, y: roadsY[14] + 30, name: 'Bounty Board' };
+  spots.boostGarage = { x: roadsX[8] + 30, y: roadsY[10] + 30, name: 'Chop Shop' };
+  spots.mural = { x: roadsX[12] + 20, y: roadsY[16] + 20, name: 'Sunfield Mural Wall' };
+  spots.fightClub = { x: roadsX[1] + 30, y: roadsY[11] + 30, name: 'Foundry Fight Club' };
+  spots.dronePark = { x: roadsX[23] + 20, y: roadsY[11] + 20, name: 'Tech Quarter Drone Park' };
+  spots.scrapyard = { x: roadsX[3] + 30, y: roadsY[16] + 30, name: 'Industrial Salvage Yard' };
+  spots.nightMarket = { x: roadsX[15] + 20, y: roadsY[16] + 20, name: 'Sunfield Night Market' };
+  spots.lighthouse = { x: roadsX[7] + 30, y: roadsY[3] + 30, name: 'Wharf Lighthouse' };
+  spots.airportRamp = { x: roadsX[24], y: roadsY[9] };
 }
 
 // ---------------------------------------------------------------- mission engine
@@ -150,6 +163,40 @@ export const MISSIONS = [
       { text: 'Walk into the neon dawn', check(s) { return dist2(s.player.x, s.player.y, spots.krossTower.x, spots.krossTower.y) > 600 * 600; } },
     ],
     reward: 5000,
+  },
+  // ---- expansion pass: three more story missions (multi-step) ----
+  {
+    id: 'm13', title: 'Ashes of the Foundry', giver: 'solGarage', from: 'Tico',
+    brief: ["The Ember Hand is not dead — a lieutenant called Vex grabbed Kross's ledgers.", "She is burning them in the Vulcan Foundry. Get the ledger before the furnace does."],
+    steps: [
+      { text: 'Reach the Vulcan Foundry', blip() { return spots.foundry; }, check: nearCheck(() => spots.foundry), setup(s, api) { api.spawnGang(spots.foundry.x - 100, spots.foundry.y + 60, 4); api.spawnGang(spots.foundry.x + 120, spots.foundry.y - 40, 3); } },
+      { text: 'Fight to the furnace floor', check(s) { return !s.enemies.some((e) => e.alive && e.kind === 'gang'); } },
+      { text: 'Grab the ledger', init(s) { s._m13pk = s.player.packages; }, check(s) { return s.player.packages > s._m13pk; }, setup(s, api) { api.pickup(spots.foundry.x, spots.foundry.y - 20, 'package'); }, failIf(s) { return s._m13burn > 75; }, update(s, dt) { s._m13burn = (s._m13burn ?? 0) + dt; } },
+      { text: 'Bring the ledger to Sol', blip() { return spots.solGarage; }, check: nearCheck(() => spots.solGarage) },
+    ],
+    reward: 2600,
+  },
+  {
+    id: 'm14', title: 'Ghost in the Grid', giver: 'ticoBar', from: 'Sol',
+    brief: ["Vex fled to Hexon Dataworks — she bought the tower's security grid.", "The drones watch every door. Trip the server farm, blind her eyes, then corner her on the roof."],
+    steps: [
+      { text: 'Cut power at Serverfarm 9', blip() { return spots.hexon; }, check: nearCheck(() => spots.hexon), setup(s, api) { api.spawnGang(spots.hexon.x + 90, spots.hexon.y, 3); } },
+      { text: 'Blind the drone park', blip() { return spots.dronePark; }, check: nearCheck(() => spots.dronePark) },
+      { text: 'Corner Vex in the tower', setup(s, api) { s._vex = spawnGangster(s, spots.hexon.x + 40, spots.hexon.y + 40); s._vex.hp = 200; s._vex.shirt = '#2ac1b8'; s._vex.isVex = true; }, blip(s) { return s._vex; }, check(s) { return !s._vex || !s._vex.alive; } },
+      { text: 'Escape before VPD locks the block', check(s) { return s.player.wanted < 1; } },
+    ],
+    reward: 3200,
+  },
+  {
+    id: 'm15', title: 'King of the Coast', giver: 'krossTower', from: 'Rio',
+    brief: ["With Kross and Vex gone, the coast needs one name whispered with respect.", "Three captains want the crown. Convince them — politely, loudly, or both."],
+    steps: [
+      { text: 'Meet the wharf captain at the lighthouse', blip() { return spots.lighthouse; }, check: nearCheck(() => spots.lighthouse), setup(s, api) { api.spawnGang(spots.lighthouse.x - 80, spots.lighthouse.y + 50, 3); } },
+      { text: 'Meet the dock captain at the salvage yard', blip() { return spots.scrapyard; }, check: nearCheck(() => spots.scrapyard), setup(s, api) { api.spawnGang(spots.scrapyard.x + 80, spots.scrapyard.y, 3); } },
+      { text: 'Win the street race of succession', blip() { return spots.airportRamp; }, check: nearCheck(() => spots.airportRamp) },
+      { text: 'Hold the boardwalk for 30 seconds', init(s) { s._crownT = 0; }, update(s, dt) { s._crownT += dt; }, check(s) { return s._crownT > 30; }, blip() { return spots.boardwalk; } },
+    ],
+    reward: 6000,
   },
 ];
 
@@ -285,6 +332,17 @@ export function setupActivities(world, state) {
   act('carwash', 'Splash Auto Spa — Full Wash', spots.carwash.x, spots.carwash.y, 'service', 40, { service: 'carwash' });
   act('karaoke', 'Shrine of Song — Karaoke Night', spots.karaoke.x, spots.karaoke.y, 'mini', 36, { mini: 'karaoke' });
   act('bmx', 'Dirt Jump Park — BMX Time Trial', spots.bmxDirt.x, spots.bmxDirt.y, 'mini', 40, { mini: 'bmx' });
+  // expansion pass: ten more side activities across the new districts
+  act('taxi', 'Strip Taxi Rank — Pick Up Fares', spots.taxiStand.x, spots.taxiStand.y, 'mini', 44, { mini: 'taxi' });
+  act('bounty', 'Bounty Board — Hunt a Skip', spots.bountyBoard.x, spots.bountyBoard.y, 'mini', 40, { mini: 'bounty' });
+  act('boost', 'Chop Shop — Boost List', spots.boostGarage.x, spots.boostGarage.y, 'mini', 40, { mini: 'boost' });
+  act('mural', 'Sunfield Mural — Spray a Tag', spots.mural.x, spots.mural.y, 'mini', 32, { mini: 'mural' });
+  act('fightclub', 'Foundry Fight Club — Bare Knuckles', spots.fightClub.x, spots.fightClub.y, 'mini', 38, { mini: 'fightclub' });
+  act('drone', 'Tech Drone Park — Race the Drones', spots.dronePark.x, spots.dronePark.y, 'mini', 40, { mini: 'drone' });
+  act('scrap', 'Salvage Yard — Metal Scrap Run', spots.scrapyard.x, spots.scrapyard.y, 'mini', 40, { mini: 'scrap' });
+  act('nightmarket', 'Night Market — Midnight Snack', spots.nightMarket.x, spots.nightMarket.y, 'mini', 32, { mini: 'nightmarket' });
+  act('tour', 'Boardwalk Tour — Postcard Run', spots.boardwalk.x, spots.boardwalk.y, 'mini', 40, { mini: 'tour' });
+  act('streetrace7', 'Airport Ramp — Terminal Velocity', spots.airportRamp.x, spots.airportRamp.y, 'race', 40, { laps: 1 });
   // boardwalk extras: beach vendors, busker, etc.
   for (let k = 0; k < 6; k++) {
     act('vnd' + k, ['Hot Dog Stand', 'Coconut Stand', 'Souvenir Kiosk', 'Busker Tip', ' Tattoo Parlor', 'Beach Volley'][k], 100 + k * (CITY_W - 200) / 5, roadsY[19] + 60, 'mini', 30, { mini: 'vendor' });
@@ -503,6 +561,66 @@ function playMini(state, a, api) {
     api.toast('BMX time trial done. ' + money$(pay) + ' and a scraped knee.');
     sfx.cash();
   }
+  // ---- expansion pass minigames ----
+  else if (a.mini === 'taxi') {
+    if (p.inCar && p.inCar.vtype === 'taxi') {
+      p.taxiFares++;
+      const pay = 120 + Math.floor(R() * 160);
+      p.money += pay;
+      api.toast('Fare delivered: ' + money$(pay) + '. ' + p.taxiFares + ' fares tonight.');
+      sfx.cash();
+    } else {
+      api.toast('Grab a yellow cab first — the rank flags one down for you.');
+      import('./entities.js').then((m) => m.spawnTaxiForFare(state));
+    }
+  } else if (a.mini === 'bounty') {
+    if (p.wanted >= 2) { api.toast('Bounty board ignores felons. Cool your stars.'); return; }
+    p.bounties++;
+    const pay = 200 + Math.floor(R() * 250);
+    p.money += pay;
+    api.toast('Skip traced and bagged. ' + money$(pay) + ' bounty paid.');
+    sfx.cash();
+  } else if (a.mini === 'boost') {
+    if (!p.inCar) { api.toast('The boost list needs a car on the lift. Drive one in.'); return; }
+    const pay = 250 + Math.floor(R() * 300);
+    p.money += pay;
+    p.inCar.hp = Math.max(30, p.inCar.hp - 15);
+    api.toast('Stripped and flipped: ' + money$(pay) + '. The lift took its toll on the car.');
+    sfx.cash();
+  } else if (a.mini === 'mural') {
+    p.aimScore += 4;
+    const pay = 80 + Math.floor(R() * 100);
+    p.money += pay;
+    api.toast('Fresh tag on the wall. The neighborhood nods. ' + money$(pay) + '.');
+    sfx.pickup();
+  } else if (a.mini === 'fightclub') {
+    if (p.hp < 40) { api.toast('You can barely stand. Patch up first.'); return; }
+    p.hp = Math.max(10, p.hp - 25);
+    const pay = 300 + Math.floor(R() * 200);
+    p.money += pay;
+    api.toast('Two rounds, one busted rib, ' + money$(pay) + ' richer.');
+    sfx.punch();
+  } else if (a.mini === 'drone') {
+    p.aimScore += 6;
+    const pay = 140 + Math.floor(R() * 140);
+    p.money += pay;
+    api.toast('Beat the drones through the pylons. ' + money$(pay) + '.');
+    sfx.checkpoint();
+  } else if (a.mini === 'scrap') {
+    const pay = 60 + Math.floor(R() * 140);
+    p.money += pay;
+    api.toast('Hauled scrap to the magnet crane. ' + money$(pay) + '.');
+    sfx.cash();
+  } else if (a.mini === 'nightmarket') {
+    if (p.money >= 20) { p.money -= 20; p.hp = Math.min(100, p.hp + 20); api.toast('Skewers and cold noodles. +20 HP, -$20.'); }
+    else api.toast('The night market does not extend credit.');
+  } else if (a.mini === 'tour') {
+    if (p.inCar) { api.toast('Postcard run is a walk. Park the car.'); return; }
+    const pay = 70 + Math.floor(R() * 90);
+    p.money += pay;
+    api.toast('You led the walking tour. Tips: ' + money$(pay) + '.');
+    sfx.cash();
+  }
 }
 
 function doService(state, a, api) {
@@ -539,7 +657,9 @@ export function activityProgress(state) {
   const total = ACTIVITIES.length;
   const done = ACTIVITIES.filter((a) => a.kind === 'collect' ? a.done : false).length
     + state.player.racesWon + state.player.deliveries + state.player.rampages
-    + state.player.jumps + state.player.fish + state.player.blackjackWins + state.player.aimScore / 10 + state.player.chessWins;
+    + state.player.jumps + state.player.fish + state.player.blackjackWins + state.player.aimScore / 10 + state.player.chessWins
+    // expansion pass: new activity counters roll into the progress total
+    + (state.player.taxiFares ?? 0) + (state.player.bounties ?? 0);
   return { total, done: Math.floor(done) };
 }
 

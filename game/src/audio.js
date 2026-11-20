@@ -98,6 +98,52 @@ export function setRainLevel(level) {
   }
 }
 
+// --- radio (expansion pass) -------------------------------------------------
+// Two procedural stations: NEON FM (synthwave arp) and BAY TALK (talk-blip bed).
+// Toggle with R while playing; stations flip on repeated presses.
+const STATIONS = [
+  { name: 'NEON FM', root: 130, scale: [0, 3, 5, 7, 10], pattern: [0, 2, 4, 2, 3, 1, 4, 0], wave: 'square', beat: 0.26 },
+  { name: 'BAY WAVES', root: 98, scale: [0, 2, 5, 7, 9], pattern: [0, 1, 3, 2, 4, 3, 1, 2], wave: 'triangle', beat: 0.34 },
+];
+let radioOn = false, radioStation = 0, radioTick = 0, radioTimer = null;
+
+function radioStep() {
+  if (!ctx || !radioOn) return;
+  const st = STATIONS[radioStation];
+  const t = ctx.currentTime + 0.03;
+  const idx = radioTick % st.pattern.length;
+  const semis = st.scale[st.pattern[idx] % st.scale.length];
+  const octave = radioTick % 8 < 4 ? 2 : 1;
+  tone(NOTE(st.root, semis + (radioTick % 16 >= 8 ? 12 : 0)) * (octave / 1), t, st.beat * 0.7, st.wave, 0.06);
+  if (radioStation === 0 && radioTick % 4 === 0) tone(NOTE(st.root / 2, 0), t, st.beat * 1.8, 'sine', 0.10);
+  // station 2: lazy surf-guitar plucks + sea-ish noise wash
+  if (radioStation === 1 && radioTick % 8 === 5) noise(t, 0.12, 0.05, 3200);
+  radioTick++;
+}
+
+export function toggleRadio() {
+  if (!ctx) return 'off';
+  radioOn = !radioOn;
+  if (radioOn) {
+    if (!radioTimer) radioTimer = setInterval(radioStep, 250);
+  } else if (radioTimer) {
+    clearInterval(radioTimer);
+    radioTimer = null;
+  }
+  return STATIONS[radioStation].name;
+}
+
+/** Next station (or first). Returns the station name for the HUD toast. */
+export function nextRadioStation() {
+  if (!ctx) return 'off';
+  if (!radioOn) return toggleRadio();
+  radioStation = (radioStation + 1) % STATIONS.length;
+  radioTick = 0;
+  return STATIONS[radioStation].name;
+}
+
+export const radioName = () => (radioOn ? STATIONS[radioStation].name : 'OFF');
+
 // --- sfx -------------------------------------------------------------------
 export const sfx = {
   shoot(weapon) {
@@ -120,11 +166,19 @@ export const sfx = {
     tone(60, t, 0.5, 'sawtooth', 0.5, sfxGain);
     tone(40, t + 0.05, 0.6, 'sine', 0.6, sfxGain);
   },
-  engine(speedNorm) {
+  engine(speedNorm, vtype = 'sedan') {
     if (!ctx) return;
     const t = ctx.currentTime;
-    const f = 70 + speedNorm * 160;
-    tone(f, t, 0.09, 'sawtooth', 0.05, sfxGain);
+    // expansion pass: per-class engine character + random pitch flutter so idle
+    // burbles instead of holding one drone
+    const base = vtype === 'bike' ? 95 : vtype === 'truck' ? 52 : vtype === 'sport' ? 88 : 70;
+    const flutter = 0.92 + Math.random() * 0.16;
+    const f = (base + speedNorm * 170) * flutter;
+    const type = vtype === 'bike' ? 'square' : vtype === 'truck' ? 'sawtooth' : 'sawtooth';
+    const vol = vtype === 'truck' ? 0.075 : 0.05;
+    tone(f, t, 0.09, type, vol, sfxGain);
+    // sport engines add a harmonic whine at high revs
+    if (vtype === 'sport' && speedNorm > 0.55) tone(f * 2.02, t, 0.07, 'sine', 0.03, sfxGain);
   },
   siren(t = 0) {
     if (!ctx) return;

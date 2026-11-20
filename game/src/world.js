@@ -13,12 +13,34 @@ const DISTRICT_PROPS = {
   'The Docks':   ['container', 'crate', 'winch'],
   'Sunfield':    ['bench', 'hydrant', 'trashcan'],
   'Marina Beach': ['umbrella', 'towel', 'cooler'],
+  'Industrial Zone': ['pipestack', 'spool', 'gantry', 'oilbarrel'],
+  'Tech Quarter': ['servercrate', 'antenna', 'cool vent', 'cablecoil'],
 };
 const PROP_COLORS = {
   crate: '#8a6a42', barrel: '#5a6a72', bollard: '#4a4e56', planter: '#3f6a46',
   signpost: '#6a7482', bench: '#7a5a3a', hedge: '#2c5232', fountain: '#5a7a8a',
   container: '#8a3a3a', winch: '#5a5a66', hydrant: '#c14b4b', trashcan: '#4a5560',
   umbrella: '#ff8c5a', towel: '#5ab8ff', cooler: '#d9d9e2',
+  pipestack: '#7a8288', spool: '#a88a4a', gantry: '#5a6e7e', oilbarrel: '#3a4a3a',
+  servercrate: '#3a4a5e', antenna: '#9aa8b8', 'cool vent': '#6a8296', cablecoil: '#c17e2a',
+};
+// "Interior" props: rendered inside building footprints (visible through lit
+// windows / through open doorways) — foundries, labs, offices and the like.
+const INTERIOR_PROPS = {
+  'Industrial Zone': ['forge', 'assemblyline', 'palletstack'],
+  'Tech Quarter': ['serverrack', 'holotable', 'deskcluster'],
+  'The Docks': ['forklift', 'cargonet'],
+  'Neon Strip': ['stage', 'barrow'],
+  'Palm Heights': ['chandelier', 'grandpiano'],
+  'Old Wharf': ['fishrack', 'ropecoil'],
+  'Sunfield': ['kitchentable'],
+};
+const INTERIOR_COLORS = {
+  forge: '#c14b2a', assemblyline: '#6a7482', palletstack: '#8a6a42',
+  serverrack: '#2a4a6e', holotable: '#2ac1b8', deskcluster: '#8a7a5a',
+  forklift: '#c18a2a', cargonet: '#4a5a6e', stage: '#7a2a5a', barrow: '#5a6a72',
+  chandelier: '#ffd23f', grandpiano: '#1a1a20', fishrack: '#7a5a3a',
+  ropecoil: '#a88a4a', kitchentable: '#7a5a3a',
 };
 
 export const T = WORLD.tile;
@@ -87,6 +109,18 @@ export class World {
           const put = (x, y, w, h) => {
             const tall = d && d.name === 'Palm Heights' ? 30 + R() * 60 : 18 + R() * 34;
             block.buildings.push({ x, y, w, h, tall, hue: R(), winSeed: Math.floor(R() * 1e9), neon: R() < 0.22 && d?.name === 'Neon Strip' });
+            // interior prop: big buildings in prop-rich districts get furniture/machinery
+            const interior = INTERIOR_PROPS[d?.name];
+            if (interior && w > 60 && h > 50 && R() < 0.7) {
+              const ikind = interior[Math.floor(R() * interior.length)];
+              block.props.push({
+                kind: ikind, interior: true,
+                x: x + w / 2 + (R() - 0.5) * (w - 30),
+                y: y + h / 2 + (R() - 0.5) * (h - 30),
+                color: INTERIOR_COLORS[ikind] ?? '#667',
+                rot: R() * Math.PI,
+              });
+            }
           };
           if (n === 1) put(bx + pad, by + pad, block.w - 2 * pad, block.h - 2 * pad);
           else if (n === 2) { put(bx + pad, by + pad, block.w - 2 * pad, block.h / 2 - pad); put(bx + pad, by + block.h / 2 + 2, block.w - 2 * pad, block.h / 2 - pad - 2); }
@@ -131,6 +165,14 @@ export class World {
       { x: roadsX[19] + 30, y: roadsY[10] + 30, name: 'St. Aurelia' },
       { x: roadsX[3] + 30, y: roadsY[14] + 30, name: 'Pier Warehouse' },
       { x: CITY_W / 2, y: roadsY[ROWS - WORLD.beachRows] + 60, name: 'Boardwalk' },
+      // expansion pass: landmarks for the two new districts + flavor extras
+      { x: roadsX[2] + 30, y: roadsY[12] + 30, name: 'Vulcan Foundry' },
+      { x: roadsX[4] + 30, y: roadsY[16] + 30, name: 'Freight Yard' },
+      { x: roadsX[22] + 30, y: roadsY[12] + 30, name: 'Hexon Dataworks' },
+      { x: roadsX[24] + 30, y: roadsY[15] + 30, name: 'Serverfarm 9' },
+      { x: roadsX[11] + 30, y: roadsY[1] + 30, name: 'Shrine of Song' },
+      { x: roadsX[7] + 30, y: roadsY[3] + 30, name: 'Wharf Lighthouse' },
+      { x: roadsX[16] + 30, y: roadsY[15] + 30, name: 'Sunfield Market' },
     ];
     // neon signs on random Neon Strip buildings
     const words = ['EMBER', 'PALMS', 'ROXY', 'LUCKY 7', 'CASA AZUL', 'VELVET', 'DINER', 'MOTEL', 'CLUB NOX', 'PAWN', 'TATTOO', 'RAMEN'];

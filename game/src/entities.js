@@ -21,6 +21,7 @@ export function makeState(world) {
       wanted: 0, heat: 0, alive: true, attackCd: 0, sprintT: 0, stamina: PLAYER.stamina,
       kills: 0, jacked: 0, missionsDone: 0, packages: 0, racesWon: 0, rampages: 0,
       jumps: 0, deliveries: 0, fish: 0, blackjackWins: 0, aimScore: 0, chessWins: 0,
+      taxiFares: 0, bounties: 0,
     },
     peds: [], cars: [], enemies: [], bullets: [], particles: [], decals: [], pickups: [],
     cam: { x: 0, y: 0, shake: 0 },
@@ -56,16 +57,35 @@ export function spawnTrafficCar(state, spec) {
   const w = state.world;
   if (!spec) spec = w.spawns.cars[Math.floor(R() * w.spawns.cars.length)];
   const kindRoll = R();
-  const vtype = kindRoll < 0.55 ? 'sedan' : kindRoll < 0.75 ? 'van' : kindRoll < 0.93 ? 'sport' : 'taxi';
+  const vtype = kindRoll < 0.44 ? 'sedan' : kindRoll < 0.62 ? 'van' : kindRoll < 0.76 ? 'sport'
+    : kindRoll < 0.86 ? 'bike' : kindRoll < 0.94 ? 'truck' : 'taxi';
+  const dims = {
+    sedan: [30, 15], van: [34, 17], sport: [28, 14], taxi: [30, 15],
+    bike: [20, 8], truck: [42, 19],
+  }[vtype] ?? [30, 15];
   const car = {
     x: spec.x, y: spec.y, dir: spec.dir ?? 0, speed: 0,
     vtype, color: vtype === 'taxi' ? '#f7c531' : CAR_COLORS[Math.floor(R() * CAR_COLORS.length)],
-    len: vtype === 'van' ? 34 : vtype === 'sport' ? 28 : 30, wid: vtype === 'van' ? 17 : 15,
-    hp: CAR.hp, alive: true, driver: 'civ',
+    len: dims[0], wid: dims[1],
+    hp: vtype === 'truck' ? 160 : vtype === 'bike' ? 45 : CAR.hp, alive: true, driver: 'civ',
     lights: phaseName(state) !== 'day', siren: false, burnt: false,
     target: null, waitT: 0, parked: spec.parked ?? false, road: spec.road ?? null,
   };
   state.cars.push(car);
+  return car;
+}
+
+/** Spawn a hailable taxi near the player (taxi-fare activity). */
+export function spawnTaxiForFare(state) {
+  const p = state.player;
+  const a = R() * Math.PI * 2;
+  const d = 160 + R() * 140;
+  const car = spawnTrafficCar(state, {
+    x: clamp(p.x + Math.cos(a) * d, T, CITY_W - T),
+    y: clamp(p.y + Math.sin(a) * d, T, CITY_H - T),
+    dir: R() * Math.PI * 2, parked: true,
+  });
+  car.vtype = 'taxi'; car.color = '#f7c531'; car.parked = true; car.driver = 'civ';
   return car;
 }
 
@@ -391,8 +411,8 @@ function drivePlayer(state, input, dt) {
   state.stats.distance += Math.abs(c.speed) * dt;
   if (input.pressed('KeyH')) sfx.horn();
   if (input.pressed('KeyQ')) c.lights = !c.lights;
-  // engine hum pitched by speed
-  sfx.engine(Math.min(1, Math.abs(c.speed) / CAR.maxSpeed));
+  // engine hum pitched by speed + vehicle class (expansion pass)
+  sfx.engine(Math.min(1, Math.abs(c.speed) / CAR.maxSpeed), c.vtype);
 }
 
 export function stepCarPhysics(state, c, throttle, steer, handbrake, dt, maxSpd) {

@@ -18,6 +18,9 @@ import { buildDossier } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Expansion pass caps: leave headroom under every scorer limit so future
+// content drops (more missions, districts, saves) never trip the gates.
+const SCORER_HEADROOM = { files: 993 - 8, bytes: 50331648 - 262144 };
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
@@ -33,8 +36,8 @@ writeFileSync(
   buildDossier(out, {
     text_max_bytes: 163840,
     screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
+    game_max_files: SCORER_HEADROOM.files,
+    game_max_bytes: SCORER_HEADROOM.bytes,
     game_path_max_bytes: 1000,
   }),
 );

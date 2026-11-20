@@ -13,12 +13,19 @@ export function saveGame(slot, state) {
       missionsDone: p.missionsDone, packages: p.packages, racesWon: p.racesWon,
       rampages: p.rampages, jumps: p.jumps, deliveries: p.deliveries, fish: p.fish,
       blackjackWins: p.blackjackWins, aimScore: p.aimScore, chessWins: p.chessWins,
+      taxiFares: p.taxiFares ?? 0, bounties: p.bounties ?? 0,
       stamina: p.stamina,
     },
     clock: state.clock, day: state.day,
     // polish-pass metadata: weather snapshot + play session stats for the slot list
     weather: state.weather?.kind ?? 'clear',
-    stats: { distance: Math.floor(state.stats?.distance ?? 0), earned: Math.floor(state.stats?.earned ?? 0) },
+    weatherLevel: state.weather?.level ?? 0,
+    stats: {
+      distance: Math.floor(state.stats?.distance ?? 0),
+      earned: Math.floor(state.stats?.earned ?? 0),
+      // expansion pass: full activity completion stats travel with the save
+      activitiesDone: (state._actDoneSnapshot?.() ?? 0),
+    },
     ongoing: {
       raceNext: state._race ? state._race.next : null,
       rampageKills: state._rampage ? state._rampage.kills : null,
@@ -45,7 +52,10 @@ export function loadGame(slot, state) {
     state.clock = data.clock;
     state.day = data.day;
     // v2 saves carry weather + distance stats; older saves fall back gracefully
-    state.weather = data.weather ? { kind: data.weather, level: data.weather === 'rain' ? 1 : 0 } : state.weather;
+    state.weather = data.weather ? {
+      kind: data.weather,
+      level: data.weather === 'rain' ? (data.weatherLevel ?? 1) : 0,
+    } : state.weather;
     if (data.stats) state.stats = { ...state.stats, ...data.stats };
     // ongoing events are dropped on load: mid-race saves resume at free roam
     state._race = null; state._delivery = null; state._rampage = null;
@@ -67,6 +77,8 @@ export function slotInfo(slot) {
     return {
       when: d.when, money: d.player.money, missions: d.player.missionsDone,
       day: d.day, weather: d.weather, distance: d.stats?.distance ?? 0,
+      // expansion pass: slot list shows activity completion too
+      activities: d.stats?.activitiesDone ?? 0,
     };
   } catch { return null; }
 }

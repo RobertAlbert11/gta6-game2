@@ -42,6 +42,8 @@ export const CAR = {
     sport: { speed: 1.28, turn: 1.12 },
     taxi: { speed: 1.02, turn: 1.0 },
     police: { speed: 1.14, turn: 1.06 },
+    bike: { speed: 1.38, turn: 1.45 },    // fast + nimble
+    truck: { speed: 0.68, turn: 0.72 },   // slow + wide turns
   },
 };
 
@@ -95,8 +97,10 @@ export const DISTRICTS = [
   { name: 'Old Wharf', x0: 0, x1: 8, y0: 0, y1: 8, tint: '#5a4a3a' },
   { name: 'Neon Strip', x0: 9, x1: 17, y0: 0, y1: 8, tint: '#3a2a5a' },
   { name: 'Palm Heights', x0: 18, x1: 25, y0: 0, y1: 8, tint: '#2a4a3a' },
-  { name: 'The Docks', x0: 0, x1: 11, y0: 9, y1: 17, tint: '#3a3f52' },
-  { name: 'Sunfield', x0: 12, x1: 25, y0: 9, y1: 17, tint: '#4a4436' },
+  { name: 'Industrial Zone', x0: 0, x1: 5, y0: 9, y1: 17, tint: '#4a4038' },
+  { name: 'The Docks', x0: 6, x1: 11, y0: 9, y1: 17, tint: '#3a3f52' },
+  { name: 'Sunfield', x0: 12, x1: 19, y0: 9, y1: 17, tint: '#4a4436' },
+  { name: 'Tech Quarter', x0: 20, x1: 25, y0: 9, y1: 17, tint: '#2a3a4e' },
 ];
 
 // District-specific spawn flavor: gang colors + relative cop attention per area.
@@ -104,8 +108,10 @@ export const DISTRICT_FLAVOR = {
   'Old Wharf':   { gang: '#7a5a2f', heatBias: 0.8, pedRush: 'dockworker' },
   'Neon Strip':  { gang: '#7a1f3d', heatBias: 1.2, pedRush: 'tourist' },
   'Palm Heights':{ gang: '#2f5a3d', heatBias: 1.35, pedRush: 'socialite' },
+  'Industrial Zone': { gang: '#6e3a2a', heatBias: 0.7, pedRush: 'millhand' },
   'The Docks':   { gang: '#3a3f6e', heatBias: 0.9, pedRush: 'docker' },
   'Sunfield':    { gang: '#6e5a2a', heatBias: 0.75, pedRush: 'local' },
+  'Tech Quarter':{ gang: '#2a5a6e', heatBias: 1.05, pedRush: 'coder' },
   'Marina Beach':{ gang: '#2a5a6e', heatBias: 0.6, pedRush: 'beachgoer' },
 };
 

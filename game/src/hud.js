@@ -2,7 +2,7 @@
 
 import { WANTED_NAMES, WEAPONS, WEATHER, money$, clamp } from './config.js';
 import { skyPhase } from './render.js';
-import { MISSIONS, missionState, nearbyActivities, blipTargets } from './missions.js';
+import { MISSIONS, missionState, nearbyActivities, blipTargets, activityProgress } from './missions.js';
 import { drawMinimap, minimapZoomName } from './minimap.js';
 
 const $ = (id) => document.getElementById(id);
@@ -91,14 +91,40 @@ export class Hud {
       else if (this._lastWeather === 'rain') this.toast('Skies clearing over the bay.');
       this._lastWeather = wk;
     }
+    // weather chip: icon + intensity + grip warning (expansion pass shows level %)
     if (!this.wxChip) {
       this.wxChip = document.createElement('div');
       this.wxChip.style.cssText = 'color:#8fc3e0;font-size:11px;margin-top:3px;letter-spacing:1px';
       this.el.clock.parentElement.appendChild(this.wxChip);
     }
-    this.wxChip.textContent = wk === 'rain' ? '☂ RAIN · grip -' : '☀ CLEAR';
-    // money/clock
-    this.el.money.textContent = money$(p.money);
+    const wl = state.weather?.kind === 'rain' ? Math.round((state.weather.level ?? 1) * 100) : 0;
+    this.wxChip.textContent = wk === 'rain'
+      ? `☂ RAIN ${wl}% · grip -`
+      : (wl > 0 ? '☂ DRIZZLE…' : '☀ CLEAR');
+    this.wxChip.style.color = wk === 'rain' ? '#6fb8ff' : '#8fc3e0';
+    // money animation: count up/down toward the real value + flash on change
+    if (this._moneyShown === undefined) this._moneyShown = p.money;
+    const diff = p.money - this._moneyShown;
+    if (diff !== 0) {
+      const stepSize = Math.max(1, Math.abs(diff) * Math.min(1, dt * 6));
+      this._moneyShown += Math.sign(diff) * stepSize;
+      if (Math.abs(p.money - this._moneyShown) < 1) this._moneyShown = p.money;
+      this.el.money.style.color = diff > 0 ? '#7CFC98' : '#ff7b6b';
+      this.el.money.style.textShadow = '0 0 12px currentColor';
+      this._moneyFlashT = 0.5;
+    }
+    this.el.money.textContent = money$(Math.round(this._moneyShown));
+    if (this._moneyFlashT > 0) {
+      this._moneyFlashT -= dt;
+      if (this._moneyFlashT <= 0) { this.el.money.style.color = ''; this.el.money.style.textShadow = ''; }
+    }
+    // activity counter chip: done/total side hustles (expansion pass)
+    if (!this.actChip) {
+      this.actChip = document.createElement('div');
+      this.actChip.style.cssText = 'color:#5fb8a8;font-size:10px;margin-top:2px;letter-spacing:1px';
+      this.el.clock.parentElement.appendChild(this.actChip);
+    }
+    this.actChip.textContent = `ACTIVITIES ${activityProgress(state).done}/${activityProgress(state).total}`;
     const h = Math.floor(state.clock), m = Math.floor((state.clock - h) * 60);
     const ph = skyPhase(state.clock);
     this.el.clock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} · ${ph.name} · Day ${state.day}`;

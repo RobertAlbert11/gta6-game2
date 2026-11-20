@@ -1,7 +1,7 @@
 // Neon Coast — game bootstrap, loop, menus, camera, day/night, screenshots hook.
 
 import { initInput, key, pressed, endFrame, mouse, clearMouse, BINDINGS } from './input.js';
-import { initAudio, setMusicMode, setRainLevel, sfx } from './audio.js';
+import { initAudio, setMusicMode, setRainLevel, sfx, toggleRadio, nextRadioStation, radioName } from './audio.js';
 import { World, CITY_W, CITY_H, roadsX, roadsY, T } from './world.js';
 import { WORLD, PLAYER, POLICE, WEATHER, clamp, dist2, money$ } from './config.js';
 import { makeState, updatePlayer, updatePeds, updateTraffic, updateEnemies, updateBullets, updateParticles, updateDirector, spawnTrafficCar, spawnPed, spawnPoliceCar, exitCar, damagePlayer, puff, addHeat } from './entities.js';
@@ -41,6 +41,8 @@ function newGame() {
   bindRefs(missionState, ACTIVITIES);
   // dynamic weather kicks off clear; the director rolls dice later
   state.weather = { kind: 'clear', level: 0, timer: 40 + Math.random() * 90 };
+  // expansion pass: save system hook to snapshot activity progress
+  state._actDoneSnapshot = () => activityProgress(state).done;
   // seed initial traffic and peds near the player
   for (let k = 0; k < 10; k++) {
     const s = world.spawns.cars[Math.floor(Math.random() * world.spawns.cars.length)];
@@ -88,6 +90,12 @@ function update(dt) {
   if (pressed(BINDINGS.zoomCycle)) { const z = cycleMinimapZoom(1); sfx.ui(); state._zoomToast = z; }
   if (pressed('F5')) { saveGame(0, state); hud.toast('Quick-saved to slot 1'); sfx.pickup(); }
   if (pressed('F9')) { const ok = loadGame(0, state); hud.toast(ok ? 'Quick-loaded slot 1' : 'Slot 1 is empty'); sfx.ui(); }
+  // expansion pass: radio toggle (R) + station flip (Shift+R) while playing
+  if (pressed(BINDINGS.radio)) {
+    const name = state.player.inCar ? nextRadioStation() : toggleRadio();
+    hud.toast(name === 'off' ? 'Radio off' : `Radio: ${name}`);
+    sfx.ui();
+  }
 
   // dynamic weather director: roll clear ↔ rain every so often
   const wtx = state.weather;
@@ -255,6 +263,8 @@ function openPause() {
     `<div class="stat"><span>Rampages</span><b>${p.rampages}</b></div>` +
     `<div class="stat"><span>Stunt jumps</span><b>${p.jumps}</b></div>` +
     `<div class="stat"><span>Cars jacked</span><b>${p.jacked}</b></div>` +
+    `<div class="stat"><span>Taxi fares</span><b>${p.taxiFares ?? 0}</b></div>` +
+    `<div class="stat"><span>Bounties</span><b>${p.bounties ?? 0}</b></div>` +
     `<div class="stat"><span>Money</span><b>${money$(p.money)}</b></div>`;
   show('pausePanel', true);
   sfx.ui();
@@ -266,7 +276,7 @@ document.getElementById('btnSave').onclick = () => { saveMode = 'save'; show('pa
 let saveMode = 'save';
 document.getElementById('btnLoad').onclick = () => { saveMode = 'load'; openSave(); };
 document.getElementById('btnControls').onclick = () => {
-  alert('WASD move · Shift sprint · F attack · 1-4 weapons · E enter/interact · Space brake/handbrake · H horn · Q headlights · C minimap zoom · F5 quick-save · F9 quick-load · M activities · P pause');
+  alert('WASD move · Shift sprint · F attack · 1-4 weapons · E enter/interact · Space brake/handbrake · H horn · Q headlights · C minimap zoom · R radio · F5 quick-save · F9 quick-load · M activities · P pause');
 };
 document.getElementById('btnNew').onclick = () => { hideAll(); newGame(); };
 document.getElementById('btnRespawn').onclick = () => {
@@ -367,6 +377,16 @@ if (q.get('shot')) {
         }
         if (which === 'day') {
           state.clock = 10.5; // bright morning for the city day view
+        }
+        if (which === 'mission') {
+          // expansion pass: mid-mission shot — tracker up, objective marker live, some heat
+          state.clock = 20.4;
+          state.player.money = 4200;
+          startMission(state, MISSIONS[6], hud.api(state)); // Casino Nights, multi-step
+          missionState.active.stepIndex = 1; // skip straight to the 'persuade' objective
+          state.weather = { kind: 'rain', level: 0.45, timer: 999 };
+          const car = spawnTrafficCar(state, { x: state.player.x - 120, y: state.player.y + 40, dir: 0.4 });
+          car.lights = true;
         }
         mode = 'play';
       }
